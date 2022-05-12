@@ -1,0 +1,9 @@
+Como detectar a remoção de um objeto
+Se eu detecto um objeto já detectado, é bom continuar atualizando ele? Até que ponto? (usar média exponencial)
+Como melhorar o tracking da posição do jogador?
+Como lidar com tamanhos de tela diferentes?
+Qual o ponto de referência da sprite?
+Pensar na dessincronização entre imagem do jogo e imagem capturada
+Como lidar com spoilage
+Câmera FOV, matriz de transformação intrinsic extrinsic
+Behavior Tree, emergency e inventory management por fora
