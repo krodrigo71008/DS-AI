@@ -1,8 +1,8 @@
-import Perception
+from perception.Perception import Perception
 import time
 import matplotlib.pyplot as plt
 
-p = Perception.Perception()
+p = Perception()
 
 
 def measure_ss_time():

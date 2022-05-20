@@ -52,11 +52,11 @@ class Control:
             self.action_in_progress = True
             self.start_time = time.time()
         elif secondary_action[0] == "go_to":
-            self.go_towards(secondary_action[1], modeling.player_model.position)
+            self.go_towards(secondary_action[1], modeling)
             self.action_in_progress = True
             self.start_time = time.time()
         elif secondary_action[0] == "explore":
-            self.explore(modeling.world_model)
+            self.explore(modeling)
             self.action_in_progress = True
             self.start_time = time.time()
         elif secondary_action[0] == "pick_up_item":
@@ -104,6 +104,8 @@ class Control:
                     self.crafting_tabs_states[self.current_crafting_tab] -= 1
                 elif change == "right":
                     self.crafting_tabs_states[self.current_crafting_tab] += 1
+            elif self.update_at_end[0] == "reset_player_direction":
+                modeling.player_model.set_direction("none")
             self.update_at_end = None
 
     def eat(self, food_name: str, modeling: Modeling):
@@ -163,45 +165,56 @@ class Control:
                         self.update_at_end = ("craft", item)
         self.mouse_action = None
 
-    def go_towards(self, objective: Point2d, player_position: Point2d):
+    def go_towards(self, objective: Point2d, modeling: Modeling):
+        player_position = modeling.player_model.position
         # direction_to_move is in radians
         direction_to_move = (objective - player_position).angle()
         # discretized_direction between -4 and 4
         discretized_direction = round(direction_to_move/(pi/4))
         if discretized_direction == -4:
             keys = ["a"]
+            modeling.player_model.set_direction("left")
         elif discretized_direction == -3:
             keys = ["a", "s"]
+            modeling.player_model.set_direction("down_left")
         elif discretized_direction == -2:
             keys = ["s"]
+            modeling.player_model.set_direction("down")
         elif discretized_direction == -1:
             keys = ["d", "s"]
+            modeling.player_model.set_direction("down_right")
         elif discretized_direction == 0:
             keys = ["d"]
+            modeling.player_model.set_direction("right")
         elif discretized_direction == 1:
             keys = ["d", "w"]
+            modeling.player_model.set_direction("up_right")
         elif discretized_direction == 2:
             keys = ["w"]
+            modeling.player_model.set_direction("up")
         elif discretized_direction == 3:
             keys = ["a", "w"]
+            modeling.player_model.set_direction("up_left")
         elif discretized_direction == 4:
             keys = ["a"]
+            modeling.player_model.set_direction("left")
         else:
             # this should never happen
             raise Exception("Invalid discretized direction!")
         self.key_action = keys
         self.mouse_action = None
+        self.update_at_end = ("reset_player_direction")
 
-    def explore(self, world_model):
+    def explore(self, modeling):
         # reminder to somehow check that I'm not stuck somewhere
         direction = randint(0, 7)
         dx = [1, 1, 0, -1, -1, -1, 0, 1]
         dy = [0, -1, -1, -1, 0, 1, 1, 1]
         norm = [1, sqrt(2), 1, sqrt(2), 1, sqrt(2), 1, sqrt(2)]
         DISTANCE = 100
-        objective = (world_model.player.position + Point2d(dx[direction], dy[direction])
+        objective = (modeling.world_model.player.position + Point2d(dx[direction], dy[direction])
                      * (DISTANCE/norm[direction]))
-        self.go_towards(objective, world_model.player.position)
+        self.go_towards(objective, modeling)
 
     def pick_up(self, obj: ObjectModel):
         self.key_action = "space"

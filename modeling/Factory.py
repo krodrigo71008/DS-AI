@@ -33,15 +33,15 @@ class Factory:
         if obj_id == 5:
             return Sapling(pos, id_, update_function)
         if obj_id == 6:
-            return PickableObjectModel(pos, id_, "Seeds")
+            return PickableObjectModel(pos, obj_id, "Seeds")
         if obj_id == 7:
-            return PickableObjectModel(pos, id_, "Flint")
+            return PickableObjectModel(pos, obj_id, "Flint")
         if obj_id == 8:
-            return PickableObjectModel(pos, id_, "MonsterMeat")
+            return PickableObjectModel(pos, obj_id, "MonsterMeat")
         if obj_id == 9:
-            return PickableObjectModel(pos, id_, "HoundTooth")
+            return PickableObjectModel(pos, obj_id, "HoundTooth")
         if obj_id == 10:
-            return PickableObjectModel(pos, id_, "PigSkin")
+            return PickableObjectModel(pos, obj_id, "PigSkin")
         if obj_id == 11:
             return Ashes(pos, update_function)
         if obj_id == 12:
@@ -51,47 +51,47 @@ class Factory:
         if obj_id == 14:
             return BerryBush(pos, id_, update_function)
         if obj_id == 15:
-            return PickableObjectModel(pos, id_, "Honey")
+            return PickableObjectModel(pos, obj_id, "Honey")
         if obj_id == 16:
-            return PickableObjectModel(pos, id_, "Stinger")
+            return PickableObjectModel(pos, obj_id, "Stinger")
         if obj_id == 17:
-            return PickableObjectModel(pos, id_, "FrogLegs")
+            return PickableObjectModel(pos, obj_id, "FrogLegs")
         if obj_id == 18:
-            return PickableObjectModel(pos, id_, "Blueprint")
+            return PickableObjectModel(pos, obj_id, "Blueprint")
         if obj_id == 19:
-            return PickableObjectModel(pos, id_, "Silk")
+            return PickableObjectModel(pos, obj_id, "Silk")
         if obj_id == 20:
             return Rock(pos)
         if obj_id == 21:
-            return PickableObjectModel(pos, id_, "Meat")
+            return PickableObjectModel(pos, obj_id, "Meat")
         if obj_id == 22:
-            return PickableObjectModel(pos, id_, "Carrot")
+            return PickableObjectModel(pos, obj_id, "Carrot")
         if obj_id == 23:
             return Campfire(pos, id_, update_function)
         if obj_id == 24:
-            return PickableObjectModel(pos, id_, "SpiderGland")
+            return PickableObjectModel(pos, obj_id, "SpiderGland")
         if obj_id == 25:
-            return PickableObjectModel(pos, id_, "Rocks")
+            return PickableObjectModel(pos, obj_id, "Rocks")
         if obj_id == 26:
-            return PickableObjectModel(pos, id_, "Axe")
+            return PickableObjectModel(pos, obj_id, "Axe")
         if obj_id == 27:
-            return PickableObjectModel(pos, id_, "Pickaxe")
+            return PickableObjectModel(pos, obj_id, "Pickaxe")
         if obj_id == 28:
-            return PickableObjectModel(pos, id_, "Shovel")
+            return PickableObjectModel(pos, obj_id, "Shovel")
         if obj_id == 29:
-            return PickableObjectModel(pos, id_, "Hammer")
+            return PickableObjectModel(pos, obj_id, "Hammer")
         if obj_id == 30:
-            return PickableObjectModel(pos, id_, "Razor")
+            return PickableObjectModel(pos, obj_id, "Razor")
         if obj_id == 31:
-            return PickableObjectModel(pos, id_, "Torch")
+            return PickableObjectModel(pos, obj_id, "Torch")
         if obj_id == 32:
-            return PickableObjectModel(pos, id_, "CutGrass")
+            return PickableObjectModel(pos, obj_id, "CutGrass")
         if obj_id == 33:
-            return PickableObjectModel(pos, id_, "Twigs")
+            return PickableObjectModel(pos, obj_id, "Twigs")
         if obj_id == 34:
-            return PickableObjectModel(pos, id_, "Rot")
+            return PickableObjectModel(pos, obj_id, "Rot")
         if obj_id == 35:
-            return PickableObjectModel(pos, id_, "RottenEgg")
+            return PickableObjectModel(pos, obj_id, "RottenEgg")
 
     @staticmethod
     def create_mob(id_, pos):

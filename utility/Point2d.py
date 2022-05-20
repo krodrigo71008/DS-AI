@@ -15,6 +15,9 @@ class Point2d:
     def __mul__(self, number):
         return Point2d(self.x*number, self.y*number)
 
+    def __truediv__(self, number):
+        return Point2d(self.x/number, self.y/number)
+
     def distance(self, other):
         return math.sqrt((self.x-other.x)**2+(self.y-other.y)**2)
 

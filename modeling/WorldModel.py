@@ -84,8 +84,9 @@ class WorldModel:
     def get_all_of(self, obj_list: List[str]) -> dict:
         result = {}
         for obj in obj_list:
-            if obj in result.keys():
-                result[obj] = self.object_lists[objects_info.get_item_info(info="obj_id", name=obj)]
+            obj_id = objects_info.get_item_info(info="obj_id", name=obj)
+            if obj_id in self.object_lists.keys():
+                result[obj] = self.object_lists[obj_id]
             else:
                 result[obj] = []
         return result

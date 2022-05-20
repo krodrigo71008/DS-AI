@@ -12,11 +12,14 @@ import numpy as np
 
 
 class DecisionMaking:
-    def __init__(self):
+    def __init__(self, debug=False):
         self.primary_action = None
         self.secondary_action = None
         self.action_requester = ActionRequester()
         self.behavior_tree = DSBehaviorTree()
+        self.debug = debug
+        if self.debug:
+            self.records = []
 
     # decides the action (high level)
     # should be called every loop
@@ -27,18 +30,19 @@ class DecisionMaking:
     # decides minor steps for the primary system action
     def secondary_system(self, modeling: Modeling):
         if self.primary_action[0] == "gather":
-            items = self.primary_action[1]
+            items = self.primary_action[1].copy()
             world = modeling.world_model
-            food_lists = {}
             if "food" in items:
-                food_lists = world.get_all_of(["BerryBush", "Honey", "Carrot"])
                 items.remove("food")
+                items.extend(["BerryBush", "Honey", "Carrot"])
+            if "CutGrass" in items:
+                items.append("Grass")
+            if "Twigs" in items:
+                items.append("Sapling")
             obj_lists = world.get_all_of(items)
             all_objects = []
             for obj_name, obj_list in obj_lists.items():
                 all_objects = [*all_objects, *obj_list]
-            for food_list in food_lists:
-                all_objects = [*all_objects, *food_list]
             locations = [obj.position for obj in all_objects]
             if len(locations) == 0:
                 self.secondary_action = ("explore", modeling.world_model)
@@ -84,8 +88,6 @@ class DecisionMaking:
                 if distances[closest_index] < MONSTER_DANGER_DISTANCE:
                     self.run_away_from(locations[closest_index], modeling.player_model.position)
 
-        # MAKE TORCH AND EQUIP IT AT NIGHT
-
     # helps with inventory management
     def inventory_management_system(self, modeling: Modeling):
         pass
@@ -95,15 +97,15 @@ class DecisionMaking:
         closest = None
         closest_distance = None
         closest_index = None
-        for index, obj in enumerate(objectives):
-            if closest is None or closest_distance > obj.distance(player_position):
-                closest = obj
-                closest_distance = obj.distance(player_position)
+        for index, obj_pos in enumerate(objectives):
+            if closest is None or closest_distance > obj_pos.distance(player_position):
+                closest = obj_pos
+                closest_distance = obj_pos.distance(player_position)
                 closest_index = index
         if closest_distance < PICK_UP_DISTANCE:
             self.secondary_action = ("pick_up_item", all_objects[closest_index])
         else:
-            self.secondary_action = ("go_to", player_position)
+            self.secondary_action = ("go_to", closest)
 
     def decide_what_to_eat(self, foods: List[str], food_counts: List[int], hunger_points_to_fill: float) -> None:
         # this will definitely be changed later
@@ -131,3 +133,5 @@ class DecisionMaking:
         self.secondary_system(modeling)
         self.inventory_management_system(modeling)
         self.emergency_system(modeling)
+        if self.debug:
+            self.records.append((self.primary_action, self.secondary_action))

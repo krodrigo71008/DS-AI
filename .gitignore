@@ -17,3 +17,6 @@ perception/text_logs/
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+test.py
+*.pkl
