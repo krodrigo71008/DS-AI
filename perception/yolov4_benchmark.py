@@ -6,10 +6,10 @@ from classes import get_class_names
 
 # images_dir = '../darknet-master/data/obj'
 # images_dir = 'augmentation'
-images_dir = 'images'
-text_logs_dir = 'text_logs'
-predictions_dir = 'predictions'
-NUM_IMAGES = 863
+images_dir = 'perception/images'
+text_logs_dir = 'perception/text_logs'
+predictions_dir = 'perception/predictions'
+NUM_IMAGES = 1
 CONFIDENCE_THRESHOLD = 0.01  # 0.01
 NMS_THRESHOLD = 0.45  # 0.4
 
@@ -40,12 +40,12 @@ filenames.extend(glob.glob(images_dir + '/**/*.png', recursive=True))
 
 # cv2.setNumThreads(6)
 
-net = cv2.dnn.readNet("darknet/yolov4-custom_best.weights", "darknet/yolov4-custom.cfg")
+net = cv2.dnn.readNet("perception/darknet/yolov4-tiny-custom_best.weights", "perception/darknet/yolov4-tiny-custom.cfg")
 # net = cv2.dnn.readNet("yolov4-tiny-anchor-obj_last.weights", "yolov4-tiny-anchor-obj.cfg")
 # net = cv2.dnn.readNet("yolov4-tiny-obj_best.weights", "yolov4-tiny-obj.cfg")
 # net = cv2.dnn.readNet("yolo-obj_last.weights", "yolo-obj.cfg")
 # net = cv2.dnn.readNet('frozen_darknet_yolov4_model.xml', 'frozen_darknet_yolov4_model.bin')
-net.setPreferableBackend(cv2.dnn.DNN_BACKEND_INFERENCE_ENGINE)
+net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT)
 net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
 model = cv2.dnn_DetectionModel(net)
@@ -57,6 +57,8 @@ boxes_list = []
 time_begin = time.time()
 count = 0
 for filename in filenames:
+    if count > NUM_IMAGES:
+        break
     frame = cv2.imread(filename)
     classes, scores, boxes = model.detect(frame, CONFIDENCE_THRESHOLD, NMS_THRESHOLD)
 
@@ -73,7 +75,7 @@ time_diff = time_end - time_begin
 time_per_image = time_diff / len(filenames)
 fps = 1.0 / time_per_image
 
-time_file = open('time.txt', 'w')
+time_file = open('perception/time.txt', 'w')
 time_file.write('time begin (s): %f\n' % time_begin)
 time_file.write('time end (s): %f\n' % time_end)
 time_file.write('time diff (s): %f\n' % time_diff)
@@ -89,10 +91,10 @@ for filename, classes, scores, boxes in zip(filenames, classes_list, scores_list
     text_log_filename = filename.split('\\')[-1].split('.')[0] + '.txt'
     text_log_file = open(text_logs_dir + '/' + text_log_filename, 'w')
     for class_id, score, box in zip(classes, scores, boxes):
-        text_log_file.write('%s %f %f %f %f %f\n' % (class_names[class_id[0]], score, box[0], box[1], box[0] + box[2],
+        text_log_file.write('%s %f %f %f %f %f\n' % (class_names[class_id], score, box[0], box[1], box[0] + box[2],
                                                      box[1] + box[3]))
         if count < NUM_IMAGES:
-            label = "%s: %f" % (class_names[class_id[0]], score)
+            label = "%s: %f" % (class_names[class_id], score)
             cv2.rectangle(frame, box, color, 2)
             cv2.putText(frame, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
     if count < NUM_IMAGES:

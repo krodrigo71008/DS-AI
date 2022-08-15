@@ -7,7 +7,7 @@ class ObjectsInfo:
     def __init__(self):
         # name refers to the object name, not the image name
         # for example: both harvested and not harvested grass are "Grass"
-        self._item_table = pd.read_csv('modeling/objects_info.csv')
+        self._item_table = pd.read_csv('utility/objects_info.csv')
         self._food_values = {
             "BaconAndEggs": [20, 75, 5, 15],
             "BatiliskWing": [3, 12.5, -10, 6],

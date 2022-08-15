@@ -10,6 +10,7 @@ class WorldModel:
     def __init__(self, player, clock):
         # map of object lists, the first index represents an object id and
         # object_list[id] has the objects with that id
+        self.local_objects = []
         self.object_lists = {}
         self.mob_list = set()
         # update_queue has (time, object_id, index, change)
@@ -31,6 +32,9 @@ class WorldModel:
                 instance.update(change)
 
         self.mob_list = set(filter(lambda mob: mob.update_destruction_time(self.clock.dt()), self.mob_list))
+
+    def update_local(self, object_list):
+        self.local_objects = object_list
 
     # time_delta should be GameTime
     def schedule_update(self, id_, ind, change, time_delta, instance):

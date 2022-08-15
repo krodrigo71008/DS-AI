@@ -41,7 +41,7 @@ class Perception:
             if class_id == 0:
                 self.last_player_position = Point2d(box[0] + box[2]//2, box[1] + box[3]//2)
         for class_id, score, box in zip(classes, scores, boxes):
-            obj = ImageObject(class_id[0], score[0], box, self.last_player_position)
+            obj = ImageObject(class_id, score, box, self.last_player_position)
             objects.append(obj)
         if debug:
             return objects, frame

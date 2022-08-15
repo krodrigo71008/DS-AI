@@ -12,7 +12,7 @@ from utility.Point2d import Point2d
 
 
 class Control:
-    def __init__(self):
+    def __init__(self, debug=False, queue=None):
         self.key_action = None
         self.mouse_action = None
         self.crafting_open = False
@@ -35,10 +35,16 @@ class Control:
         self.action_in_progress = False
         self.start_time = None
         self.update_at_end = None
+        self.debug = debug
+        if self.debug:
+            self.records = []
+            self.queue = queue
 
     def control(self, decision_making: DecisionMaking, modeling: Modeling):
         # secondary_action is (action, payload)
         secondary_action = decision_making.secondary_action
+        if self.debug:
+            self.records.append((self.key_action, self.mouse_action))
         if self.action_in_progress:
             self.continue_action(modeling)
             if self.action_in_progress:
@@ -67,6 +73,9 @@ class Control:
             self.equip(secondary_action[1], modeling)
             self.action_in_progress = True
             self.start_time = time.time()
+        if self.debug:
+            self.queue.put(("key_action", self.key_action))
+            self.queue.put(("mouse_action", self.mouse_action))
 
     def continue_action(self, modeling: Modeling):
         # each action has different signals for stopping, this will probably be changed someday
@@ -217,6 +226,6 @@ class Control:
         self.go_towards(objective, modeling)
 
     def pick_up(self, obj: ObjectModel):
-        self.key_action = "space"
+        self.key_action = ["space"]
         self.mouse_action = None
         self.update_at_end = ("pick_up", obj)

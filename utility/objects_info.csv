@@ -1,0 +1,71 @@
+image_id,obj_id,name,object_type,image_paths,image_size
+0,-1,Wilson,PLAYER,"['wilson_actions', 'wilson_attacks', 'wilson_axe', 'wilson_basic', 'wilson_eat', 'wilson_item', 'wilson_pickaxe']",MEDIUM
+1,-1,Treeguard,MOB,"['leif_attacks', 'leif_idles', 'leif_lumpy_attacks', 'leif_lumpy_idles', 'leif_lumpy_walking', 'leif_walking']",LARGE
+2,-1,Bee,MOB,['bee_build_bee'],SMALL
+3,-1,KillerBee,MOB,['bee_angry_build_bee'],SMALL
+4,-1,Frog,MOB,['frog'],SMALL
+5,-1,Hound,MOB,['hound'],MEDIUM
+6,-1,IceHound,MOB,['hound_ice'],MEDIUM
+7,-1,FireHound,MOB,['hound_red'],MEDIUM
+8,-1,Spider,MOB,['spider'],SMALL
+9,-1,SpiderWarrior,MOB,"['spider_warrior', 'spider_warrior_2']",SMALL
+10,-1,Tallbird,MOB,['ds_tallbird_basic'],LARGE
+11,-1,Ghost,MOB,['ghost_build'],MEDIUM
+12,-1,GuardianPig,MOB,"['pig_guard', 'pig_guard_2', 'pig_guard_3']",MEDIUM
+13,-1,Butterfly,MOB,['butterfly_basic'],SMALL
+14,-1,Merm,MOB,"['merm', 'merm_2', 'merm_3']",MEDIUM
+15,-1,BirdRed,MOB,['crow_red'],SMALL
+16,-1,BirdBlack,MOB,['crow'],SMALL
+17,-1,Rabbit,MOB,"['rabbit', 'rabbit_winter']",SMALL
+18,1,TallbirdNest,OBJECT,['tallbird_nest'],SMALL
+19,2,TallbirdEgg,OBJECT,['tallbird_egg'],SMALL
+20,3,Flower,OBJECT,['flowers'],SMALL
+21,4,Grass,OBJECT,['grass'],MEDIUM
+22,4,Grass,OBJECT,['grass_picked'],SMALL
+23,5,Sapling,OBJECT,['sapling'],MEDIUM
+24,5,Sapling,OBJECT,['sapling_picked'],MEDIUM
+25,6,Seeds,OBJECT,['seeds'],SMALL
+26,7,Flint,OBJECT,['flint'],SMALL
+27,8,MonsterMeat,OBJECT,['meat_monster'],SMALL
+28,9,HoundTooth,OBJECT,['hounds_tooth'],SMALL
+29,10,PigSkin,OBJECT,['pigskin'],SMALL
+30,11,Ashes,OBJECT,['ash'],SMALL
+31,12,Evergreen,OBJECT,['evergreen'],MEDIUM
+32,12,Evergreen,OBJECT,['evergreen_2'],LARGE
+33,12,Evergreen,OBJECT,['evergreen_3'],LARGE
+34,13,SpiderNest,OBJECT,['spider_cocoon'],LARGE
+35,14,BerryBush,OBJECT,"['berrybush', 'berrybush2']",MEDIUM
+36,14,BerryBush,OBJECT,"['berrybush_picked', 'berrybush2_picked']",MEDIUM
+37,15,Honey,OBJECT,['honey'],SMALL
+38,16,Stinger,OBJECT,['stinger'],SMALL
+39,17,FrogLegs,OBJECT,['frog_legs'],SMALL
+40,18,Blueprint,OBJECT,['blueprint'],SMALL
+41,19,Silk,OBJECT,['silk'],SMALL
+42,20,Rock,OBJECT,['rock'],MEDIUM
+43,21,Meat,OBJECT,['meat'],SMALL
+44,22,Carrot,OBJECT,['carrot_planted'],SMALL
+45,23,Campfire,OBJECT,['campfire+campfire_fire'],MEDIUM
+46,24,SpiderGland,OBJECT,['spider_gland'],SMALL
+47,-1,Tentacle,MOB,['tentacle_ground'],SMALL
+48,-1,Tentacle,MOB,['tentacle'],LARGE
+49,-1,ClockRook,MOB,['rook'],LARGE
+50,-1,ClockKnight,MOB,['knight'],MEDIUM
+51,-1,ClockBishop,MOB,['bishop'],LARGE
+52,-1,Nightmare1,MOB,['shadow_insanity1_basic'],LARGE
+53,-1,Nightmare2,MOB,['shadow_insanity2_basic'],LARGE
+54,-1,Werepig,MOB,"['werepig_1', 'werepig_2']",MEDIUM
+55,-1,Mosquito,MOB,['mosquito'],SMALL
+56,-1,BirdBlue,MOB,['crow_blue'],SMALL
+57,25,Rocks,OBJECT,['rocks'],SMALL
+58,12,Evergreen,OBJECT,['evergreen_4'],LARGE
+59,26,Axe,OBJECT,['axe'],SMALL
+60,27,Pickaxe,OBJECT,['pickaxe'],SMALL
+61,28,Shovel,OBJECT,['shovel'],SMALL
+62,29,Hammer,OBJECT,['hammer'],SMALL
+63,30,Razor,OBJECT,['razor'],SMALL
+64,31,Torch,OBJECT,['torch'],SMALL
+65,32,CutGrass,OBJECT,['cutgrass'],SMALL
+66,33,Twigs,OBJECT,['twigs'],SMALL
+67,34,Rot,OBJECT,['spoiled_food'],SMALL
+68,35,RottenEgg,OBJECT,['spoiled_eggs'],SMALL
+69,36,Berries,OBJECT,['berries'],SMALL

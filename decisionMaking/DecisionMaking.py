@@ -1,4 +1,5 @@
 from typing import List
+import math
 
 from decisionMaking.ActionRequester import ActionRequester
 from decisionMaking.BehaviorTree import DSBehaviorTree
@@ -12,7 +13,7 @@ import numpy as np
 
 
 class DecisionMaking:
-    def __init__(self, debug=False):
+    def __init__(self, debug=False, queue=None):
         self.primary_action = None
         self.secondary_action = None
         self.action_requester = ActionRequester()
@@ -20,6 +21,7 @@ class DecisionMaking:
         self.debug = debug
         if self.debug:
             self.records = []
+            self.queue = queue
 
     # decides the action (high level)
     # should be called every loop
@@ -127,6 +129,19 @@ class DecisionMaking:
         direction_to_run = (player_position - danger_position).angle()
         self.secondary_action = ("run", direction_to_run)
 
+    @staticmethod
+    def textify(secondary_action):
+        aux_str = ""
+        if secondary_action[0] == "run":
+            aux_str = f"{secondary_action[1]/math.pi*180}°"
+        elif secondary_action[0] == "go_to":
+            aux_str = (secondary_action[1].x, secondary_action[1].y)
+        elif (secondary_action[0] == "eat" or secondary_action[0] == "pick_up_item" 
+            or secondary_action[0] == "explore" or secondary_action[0] == "equip" or secondary_action[0] == "craft"
+            ):
+            aux_str = secondary_action[1]
+        return (secondary_action[0], aux_str)
+
     # main function that should be called
     def decide(self, modeling):
         self.primary_system(modeling)
@@ -134,4 +149,6 @@ class DecisionMaking:
         self.inventory_management_system(modeling)
         self.emergency_system(modeling)
         if self.debug:
-            self.records.append((self.primary_action, self.secondary_action))
+            self.queue.put(("primary_action", self.primary_action))
+            self.queue.put(("secondary_action", self.secondary_action))
+            self.records.append((self.primary_action, self.textify(self.secondary_action)))

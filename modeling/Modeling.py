@@ -7,19 +7,19 @@ from utility.Clock import Clock
 
 
 class Modeling:
-    def __init__(self, debug=False):
+    def __init__(self, debug=False, queue=None):
         self.clock = Clock()
         self.player_model = PlayerModel(self.clock)
         self.world_model = WorldModel(self.player_model, self.clock)
-        if debug:
+        self.debug = debug
+        if self.debug:
             self.records = []
-            self.debug = True
-        else:
-            self.debug = False
+            self.queue = queue
 
     def update_model(self, obj_list):
         self.clock.update()
         self.world_model.update()
+        self.world_model.update_local(obj_list)
         self.player_model.update()
         for obj in obj_list:
             if objects_info.get_item_info(image_id=obj.id, info="object_type") == "PLAYER":
@@ -30,3 +30,6 @@ class Modeling:
                 self.world_model.mob_detected(obj)
         if self.debug:
             self.records.append(copy.deepcopy((self.world_model.object_lists, self.world_model.mob_list, self.player_model)))
+            self.queue.put(("detected_objects", copy.deepcopy(self.world_model.local_objects)))
+            self.queue.put(("world_model_objects", copy.deepcopy(self.world_model.object_lists)))
+            self.queue.put(("player", copy.deepcopy(self.world_model.player)))
