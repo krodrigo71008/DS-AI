@@ -6,8 +6,8 @@ from utility.generate_images import generate_image
 
 if __name__ == "__main__":
     obj_info = pd.read_csv('utility/objects_info.csv')
-    ANNOTATIONS_PER_OBJECT = 1000
-    OBJ_COUNT_PER_IMAGE = 15
+    ANNOTATIONS_PER_OBJECT = 2000
+    OBJ_COUNT_PER_IMAGE = 20
     obj_sequence = []
     for i in range(obj_info.shape[0]):
         obj_sequence.extend([i]*ANNOTATIONS_PER_OBJECT)

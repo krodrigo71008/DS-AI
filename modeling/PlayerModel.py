@@ -1,22 +1,14 @@
+import math
 from modeling.Inventory import Inventory
+from utility.Clock import Clock
 from utility.Point2d import Point2d
-from modeling.constants import PLAYER_BASE_SPEED, BASE_SPEED_MODIFIER
-
-NONE = 0
-LEFT = 1
-UP_LEFT = 2
-UP = 3
-UP_RIGHT = 4
-RIGHT = 5
-DOWN_RIGHT = 6
-DOWN = 7
-DOWN_LEFT = 8
+from modeling.constants import PLAYER_BASE_SPEED
 
 
 class PlayerModel:
     def __init__(self, clock):
-        self.position = Point2d(0, 0)
-        self.clock = clock
+        self.position : Point2d = Point2d(0, 0)
+        self.clock : Clock = clock
         self.inventory = Inventory()
         self.health = 150
         self.max_health = 150
@@ -24,48 +16,26 @@ class PlayerModel:
         self.max_hunger = 150
         self.sanity = 200
         self.max_sanity = 200
-        self.speed = 6
-        self.direction = NONE
+        self.speed = PLAYER_BASE_SPEED
+        self.direction : float = None
 
-    def move(self, dt):
-        if self.direction == NONE:
-            pass
-        elif self.direction == LEFT:
-            self.position += Point2d(-1, 0)*dt*PLAYER_BASE_SPEED*self.speed/BASE_SPEED_MODIFIER
-        elif self.direction == UP_LEFT:
-            self.position += Point2d(-1/1.4142135, 1/1.4142135)*dt*PLAYER_BASE_SPEED*self.speed/BASE_SPEED_MODIFIER
-        elif self.direction == UP:
-            self.position += Point2d(0, 1)*dt*PLAYER_BASE_SPEED*self.speed/BASE_SPEED_MODIFIER
-        elif self.direction == UP_RIGHT:
-            self.position += Point2d(1/1.4142135, 1/1.4142135)*dt*PLAYER_BASE_SPEED*self.speed/BASE_SPEED_MODIFIER
-        elif self.direction == RIGHT:
-            self.position += Point2d(1, 0)*dt*PLAYER_BASE_SPEED*self.speed/BASE_SPEED_MODIFIER
-        elif self.direction == DOWN_RIGHT:
-            self.position += Point2d(1/1.4142135, -1/1.4142135)*dt*PLAYER_BASE_SPEED*self.speed/BASE_SPEED_MODIFIER
-        elif self.direction == DOWN:
-            self.position += Point2d(0, -1)*dt*PLAYER_BASE_SPEED*self.speed/BASE_SPEED_MODIFIER
-        elif self.direction == DOWN_LEFT:
-            self.position += Point2d(-1/1.4142135, -1/1.4142135)*dt*PLAYER_BASE_SPEED*self.speed/BASE_SPEED_MODIFIER
+    def move(self, dt : float) -> None:
+        """Moves the player model in the current direction
 
-    def set_direction(self, direction):
-        if direction == "none":
-            self.direction = NONE
-        elif direction == "left":
-            self.direction = LEFT
-        elif direction == "up_left":
-            self.direction = UP_LEFT
-        elif direction == "up":
-            self.direction = UP
-        elif direction == "up_right":
-            self.direction = UP_RIGHT
-        elif direction == "right":
-            self.direction = RIGHT
-        elif direction == "down_right":
-            self.direction = DOWN_RIGHT
-        elif direction == "down":
-            self.direction = DOWN
-        elif direction == "down_left":
-            self.direction = DOWN_LEFT
+        :param dt: amount of time to update for
+        :type dt: float
+        """
+        if self.direction is None:
+            return
+        self.position += Point2d(math.cos(self.direction), math.sin(self.direction))*dt*self.speed
+
+    def set_direction(self, direction : float) -> None:
+        """Sets player direction
+
+        :param direction: direction in radians, expected to be a multiple of pi/4
+        :type direction: float
+        """
+        self.direction = direction
 
     def update(self):
         self.inventory.update(self.clock.dt())

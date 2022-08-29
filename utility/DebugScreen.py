@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
 import queue
-from turtle import pos
 
 from perception.screen import SCREEN_SIZE
 from modeling.ObjectsInfo import objects_info
@@ -71,14 +70,14 @@ class DebugScreen:
             elif info[0] == "player":
                 self.player_position = info[1].position
         if self.player_position is not None:
-            x_range = (self.player_position.x - self.CLOSE_OBJECTS_WIDTH/2, self.player_position.x + self.CLOSE_OBJECTS_WIDTH/2)
-            y_range = (self.player_position.y - self.CLOSE_OBJECTS_HEIGHT/2, self.player_position.y + self.CLOSE_OBJECTS_HEIGHT/2)
+            x_range = (self.player_position.x1 - self.CLOSE_OBJECTS_WIDTH/2, self.player_position.x1 + self.CLOSE_OBJECTS_WIDTH/2)
+            y_range = (self.player_position.x2 - self.CLOSE_OBJECTS_HEIGHT/2, self.player_position.x2 + self.CLOSE_OBJECTS_HEIGHT/2)
             for name, position in self.world_objects:
-                if position.x > x_range[0] and position.x < x_range[1] and position.y > y_range[0] and position.y < y_range[1]:
+                if position.x1 > x_range[0] and position.x1 < x_range[1] and position.x2 > y_range[0] and position.x2 < y_range[1]:
                     if name == "Grass":
-                        self.draw_shape(position.x-x_range[0], position.y-y_range[0], "triangle", "global")
+                        self.draw_shape(position.x1-x_range[0], position.x2-y_range[0], "triangle", "global")
                     elif name == "Sapling":
-                        self.draw_shape(position.x-x_range[0], position.y-y_range[0], "square", "global")
+                        self.draw_shape(position.x1-x_range[0], position.x2-y_range[0], "square", "global")
             self.draw_shape(self.CLOSE_OBJECTS_WIDTH/2, self.CLOSE_OBJECTS_HEIGHT/2, "circle", "global")
             self.player_position = None
             self.world_objects = []

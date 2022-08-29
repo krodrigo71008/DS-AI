@@ -5,10 +5,11 @@ from PIL import Image, ImageDraw
 # (900, 460), (1015, 615) character
 # (1680, 0), (1920, 290) status
 # (1780, 950), (1920, 1080) map icons
+# considering 1920x1080
 
 if __name__ == "__main__":
-    image_path = "perception/bg_images/out886.png"
-    points = [(65, 190), (65, 890), (420, 1010), (1500, 1010), (900, 460), (1015, 615), (1680, 290), (1780, 950)]
+    image_path = "tests/0872.jpg"
+    points = [(960, 550)]
     with Image.open(image_path) as image:
         draw = ImageDraw.Draw(image)
         for point in points:

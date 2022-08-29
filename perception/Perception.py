@@ -16,7 +16,7 @@ class Perception:
             self.class_names = [cname.strip() for cname in f.readlines()]
         self.CONFIDENCE_THRESHOLD = 0.01
         self.NMS_THRESHOLD = 0.45
-        net = cv2.dnn.readNet("perception/darknet/yolov4-custom_best.weights", "perception/darknet/yolov4-custom.cfg")
+        net = cv2.dnn.readNet("perception/darknet/yolov4-tiny-custom_best.weights", "perception/darknet/yolov4-tiny-custom.cfg")
         net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT)
         net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
         self.model = cv2.dnn_DetectionModel(net)
@@ -41,7 +41,7 @@ class Perception:
             if class_id == 0:
                 self.last_player_position = Point2d(box[0] + box[2]//2, box[1] + box[3]//2)
         for class_id, score, box in zip(classes, scores, boxes):
-            obj = ImageObject(class_id, score, box, self.last_player_position)
+            obj = ImageObject(class_id, score, box)
             objects.append(obj)
         if debug:
             return objects, frame

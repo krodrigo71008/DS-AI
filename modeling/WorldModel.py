@@ -1,13 +1,30 @@
 import heapq
-from typing import List
+import math
+
+from modeling.PlayerModel import PlayerModel
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from modeling.Factory import factory
 from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB
 from modeling.ObjectsInfo import objects_info
+from perception.screen import SCREEN_SIZE
+from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING
+from utility.Clock import Clock
+from utility.Point2d import Point2d
 
 
 class WorldModel:
-    def __init__(self, player, clock):
+    def __init__(self, player : PlayerModel, clock : Clock):
+        """Generates the world model. It should be noted that the full workflow for a cycle of updating is:
+            - if player was detected (on perception), call player_detected()
+            - call update_origin_position()
+            - for each object detected, call object_detected()
+            - after all that, call finish_cycle()
+
+        :param player: the player model
+        :type player: PlayerModel
+        :param clock: a clock to keep track of how much time passed since the last update
+        :type clock: Clock
+        """
         # map of object lists, the first index represents an object id and
         # object_list[id] has the objects with that id
         self.local_objects = []
@@ -15,8 +32,11 @@ class WorldModel:
         self.mob_list = set()
         # update_queue has (time, object_id, index, change)
         self.update_queue = []
-        self.player = player
-        self.clock = clock
+        self.player : PlayerModel = player
+        self.latest_detected_player_position : Point2d = None
+        self.cycles_since_player_detected : int = 0
+        self.origin_coordinates : Point2d = player.position
+        self.clock : Clock = clock
 
     def update(self):
         # [3] gets the 'timestamp' in which the change should happen
@@ -40,12 +60,83 @@ class WorldModel:
     def schedule_update(self, id_, ind, change, time_delta, instance):
         heapq.heappush(self.update_queue, (id_, ind, change, self.clock.time_from_now(time_delta), instance))
 
+    def player_detected(self, image_obj_pos : Point2d):
+        self.latest_detected_player_position = image_obj_pos
+        self.cycles_since_player_detected = 0
+
+    def update_origin_position(self):
+        # if it's been more than 10 cycles since the last time the player was detected, use the center of the screen
+        if self.cycles_since_player_detected > 10:
+            player_screen_position = Point2d(SCREEN_SIZE["height"]/2, SCREEN_SIZE["width"]/2)
+        else:
+            player_screen_position = self.latest_detected_player_position
+        # pos in (x, z) in world coords
+        pos = self.local_to_almost_global_position(player_screen_position, CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+        self.origin_coordinates = self.player.position - pos
+
     # positions are Point2d
-    def local_to_global_position(self, local_position):
-        return self.player.position + local_position
+    def local_to_almost_global_position(self, local_position : Point2d, heading : float, pitch : float, distance : float, fov : float) -> Point2d:
+        """Converts the local position (2d image position) to an almost global position (could be 3d, 
+        but everything is on the ground)
+
+        :param local_position: object position relative to the top left corner
+        :type local_position: Point2d
+        :param heading: camera heading
+        :type heading: float
+        :param pitch: camera pitch
+        :type pitch: float
+        :param distance: camera distance
+        :type distance: float
+        :param fov: camera FOV
+        :type fov: float
+        :return: position in the world's coordinate system, but with the origin in the point in the screen center
+        :rtype: Point2d
+        """
+        # f = H / (2*tan(AFOV/2)), f focal distance, H height, AFOV angular FOV
+        f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
+        # in opencv, y points down and x points to the right, but in our coordinate system x is down and y to the right 
+        fx = (local_position.x2 - SCREEN_SIZE["height"]/2)/f
+        fy = (local_position.x1 - SCREEN_SIZE["width"]/2)/f
+        heading = heading*math.pi/180
+        pitch = pitch*math.pi/180
+        world_x = ((math.cos(heading)*fx
+                +math.sin(pitch)*math.sin(heading)*fy
+                +math.sin(pitch)*math.cos(heading)*fx*1.5/distance
+                +math.sin(heading)*fy*1.5/distance
+                -math.cos(pitch)*math.cos(heading)*1.5/distance)/(math.sin(pitch)+math.cos(pitch)*fx))*distance
+        world_z = ((math.sin(heading)*fx
+                -math.sin(pitch)*math.cos(heading)*fy
+                +math.sin(pitch)*math.sin(heading)*fx*1.5/distance
+                -math.cos(heading)*fy*1.5/distance
+                -math.cos(pitch)*math.sin(heading)*1.5/distance)/(math.sin(pitch)+math.cos(pitch)*fx))*distance
+        # in our world model, we'll use (x,z) as the two coordinates
+        return Point2d(world_x, world_z)
+
+    def local_to_global_position(self, local_position : Point2d, heading : float, pitch : float, distance : float, fov : float) -> Point2d:
+        """Converts the local position (2d image position) to the global position (could be 3d, 
+        but everything is on the ground)
+
+        :param local_position: object position relative to the top left corner
+        :type local_position: Point2d
+        :param heading: camera heading
+        :type heading: float
+        :param pitch: camera pitch
+        :type pitch: float
+        :param distance: camera distance
+        :type distance: float
+        :param fov: camera FOV
+        :type fov: float
+        :return: position in the world's coordinate system, but with the origin in the point in the screen center
+        :rtype: Point2d
+        """
+        pos = self.local_to_almost_global_position(local_position, heading, pitch, distance, fov)
+        return self.origin_coordinates + pos
 
     def object_detected(self, image_obj):
-        pos = self.local_to_global_position(image_obj.position_from_player())
+        # anchor points are usually at the bottom (y) and middle (x)
+        pos = self.local_to_global_position(
+            Point2d(image_obj.box[0] + image_obj.box[2]//2, image_obj.box[1] + image_obj.box[3]),
+            CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
         obj_id = objects_info.get_item_info(info="obj_id", image_id=image_obj.id)
         if obj_id in self.object_lists:
             for obj in self.object_lists[obj_id]:
@@ -73,19 +164,24 @@ class WorldModel:
             self.object_lists[obj_id] = [obj]
 
     def mob_detected(self, image_obj):
-        # for now I'll just track mobs on screen, later I should track the last position when
-        # the mob goes off screen and maybe keep tracking if it appears close to that position
-        pos = image_obj.position_from_player()
-        for mob in self.mob_list:
-            if pos.distance(mob.position) < DISTANCE_FOR_SAME_MOB and image_obj.id == mob.id:
-                mob.update(pos)
-                mob.refresh_destruction_time()
-                return
-        mob = factory.create_mob(image_obj.id, pos)
-        self.mob_list.add(mob)
+        # this is just plain wrong, but for now I'll leave it commented for reference
+        # pos = image_obj.position_from_player()
+        # for mob in self.mob_list:
+        #     if pos.distance(mob.position) < DISTANCE_FOR_SAME_MOB and image_obj.id == mob.id:
+        #         mob.update(pos)
+        #         mob.refresh_destruction_time()
+        #         return
+        # mob = factory.create_mob(image_obj.id, pos)
+        # self.mob_list.add(mob)
+        pass
+        
+    def finish_cycle(self) -> None:
+        """Marks the end of a modeling cycle, this should be called in the end of update_model() on Modeling
+        """
+        self.cycles_since_player_detected += 1
 
     # returns dict of objects
-    def get_all_of(self, obj_list: List[str]) -> dict:
+    def get_all_of(self, obj_list: list[str]) -> dict:
         result = {}
         for obj in obj_list:
             obj_id = objects_info.get_item_info(info="obj_id", name=obj)

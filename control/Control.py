@@ -1,3 +1,4 @@
+import math
 from random import randint
 from math import sqrt, pi
 from typing import List
@@ -8,7 +9,9 @@ from decisionMaking.DecisionMaking import DecisionMaking
 from modeling.Modeling import Modeling
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
+from modeling.constants import CAMERA_HEADING
 from utility.Point2d import Point2d
+from utility.utility import clamp2pi
 
 
 class Control:
@@ -178,38 +181,41 @@ class Control:
         player_position = modeling.player_model.position
         # direction_to_move is in radians
         direction_to_move = (objective - player_position).angle()
-        # discretized_direction between -4 and 4
-        discretized_direction = round(direction_to_move/(pi/4))
+        # correcting to account for camera heading
+        direction_to_move_from_camera = clamp2pi(direction_to_move - CAMERA_HEADING*math.pi/180)
+        # discretized_direction between -4 and 4, 0 aligned with camera direction and increasing clockwise
+        discretized_direction = round(direction_to_move_from_camera/(pi/4))
         if discretized_direction == -4:
-            keys = ["a"]
-            modeling.player_model.set_direction("left")
-        elif discretized_direction == -3:
-            keys = ["a", "s"]
-            modeling.player_model.set_direction("down_left")
-        elif discretized_direction == -2:
-            keys = ["s"]
-            modeling.player_model.set_direction("down")
-        elif discretized_direction == -1:
-            keys = ["d", "s"]
-            modeling.player_model.set_direction("down_right")
-        elif discretized_direction == 0:
-            keys = ["d"]
-            modeling.player_model.set_direction("right")
-        elif discretized_direction == 1:
-            keys = ["d", "w"]
-            modeling.player_model.set_direction("up_right")
-        elif discretized_direction == 2:
+            # up
             keys = ["w"]
-            modeling.player_model.set_direction("up")
-        elif discretized_direction == 3:
-            keys = ["a", "w"]
-            modeling.player_model.set_direction("up_left")
-        elif discretized_direction == 4:
+        elif discretized_direction == -3:
+            # up_left
+            keys = ["w", "a"]
+        elif discretized_direction == -2:
+            # left
             keys = ["a"]
-            modeling.player_model.set_direction("left")
+        elif discretized_direction == -1:
+            # down_left
+            keys = ["a", "s"]
+        elif discretized_direction == 0:
+            # down
+            keys = ["s"]
+        elif discretized_direction == 1:
+            # down_right
+            keys = ["d", "s"]
+        elif discretized_direction == 2:
+            # right
+            keys = ["d"]
+        elif discretized_direction == 3:
+            # up_right
+            keys = ["d", "w"]
+        elif discretized_direction == 4:
+            # up
+            keys = ["w"]
         else:
             # this should never happen
             raise Exception("Invalid discretized direction!")
+        modeling.player_model.set_direction(round(direction_to_move/(pi/4)))
         self.key_action = keys
         self.mouse_action = None
         self.update_at_end = ("reset_player_direction")

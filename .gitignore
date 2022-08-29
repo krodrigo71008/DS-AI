@@ -26,3 +26,5 @@ perception/yolo_test_results/
 test.py
 *.pkl
 *.png
+*.jpg
+*.zip

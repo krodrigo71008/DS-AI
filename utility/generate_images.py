@@ -87,12 +87,12 @@ def generate_image(obj_list: list[int], obj_info: pd.DataFrame, img_name: str) -
                 chosen_imgs.append(chosen_img)
             max_size_class = obj_info.iloc[image_id]['image_size']
             if max_size_class == "SMALL":
-                max_size = randint(50, 100)
+                max_size = randint(50, 150)
             elif max_size_class == "MEDIUM":
-                max_size = randint(150, 250)
+                max_size = randint(150, 300)
             else:
                 # LARGE
-                max_size = randint(300, 450)
+                max_size = randint(300, 500)
             scale_factor = max(max(width_list), max(height_list))/max_size
             if scale_factor < 1:
                 width = max(width_list)
@@ -118,7 +118,7 @@ def generate_image(obj_list: list[int], obj_info: pd.DataFrame, img_name: str) -
                     image_to_paste = added_image.resize((int(added_image.size[0]/scale_factor), int(added_image.size[1]/scale_factor)))
                     # enhancer changes the image's brightness
                     enhancer = ImageEnhance.Brightness(image_to_paste)
-                    image.paste(enhancer.enhance(random()*2), 
+                    image.paste(enhancer.enhance(random()*1.5+0.25), 
                         (int(random_x+offsets[i][0]), int(random_y+offsets[i][1])), 
                         image_to_paste)
                     bb_list.append([int(random_x+offsets[i][0]), 

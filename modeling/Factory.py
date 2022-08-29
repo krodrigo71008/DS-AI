@@ -92,6 +92,8 @@ class Factory:
             return PickableObjectModel(pos, obj_id, "Rot")
         if obj_id == 35:
             return PickableObjectModel(pos, obj_id, "RottenEgg")
+        if obj_id == 36:
+            return PickableObjectModel(pos, obj_id, "Berries")
 
     @staticmethod
     def create_mob(id_, pos):
@@ -130,24 +132,22 @@ class Factory:
         if id_ == 18:
             return MobModel(pos, id_, "Rabbit")
         if id_ == 48:
-            return MobModel(pos, id_, "TentacleGround")
-        if id_ == 49:
             return MobModel(pos, id_, "Tentacle")
-        if id_ == 50:
+        if id_ == 49:
             return MobModel(pos, id_, "ClockRook")
-        if id_ == 51:
+        if id_ == 50:
             return MobModel(pos, id_, "ClockKnight")
-        if id_ == 52:
+        if id_ == 51:
             return MobModel(pos, id_, "ClockBishop")
-        if id_ == 53:
+        if id_ == 52:
             return MobModel(pos, id_, "CrawlingHorror")
-        if id_ == 54:
+        if id_ == 53:
             return MobModel(pos, id_, "Terrorbeak")
-        if id_ == 55:
+        if id_ == 54:
             return MobModel(pos, id_, "Werepig")
-        if id_ == 56:
+        if id_ == 55:
             return MobModel(pos, id_, "Mosquito")
-        if id_ == 57:
+        if id_ == 56:
             return MobModel(pos, id_, "BirdBlue")
 
 
