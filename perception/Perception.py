@@ -1,10 +1,12 @@
 import mss
-import numpy
+import numpy as np
 import cv2
+from PIL import Image
 
 from perception.ImageObject import ImageObject
 from perception.screen import SCREEN_SIZE, SCREEN_POS
 from utility.Point2d import Point2d
+from utility.utility import hide_huds
 
 mon = {"top": SCREEN_POS["top"], "left": SCREEN_POS["left"],
        "width": SCREEN_SIZE["width"], "height": SCREEN_SIZE["height"]}
@@ -28,12 +30,15 @@ class Perception:
     @staticmethod
     def get_screenshot():
         sct = mss.mss()
-        img = numpy.asarray(sct.grab(mon))
+        img = np.asarray(sct.grab(mon))
         no_alpha_img = img[:, :, :3]
         return no_alpha_img
 
     def perceive(self, debug=False):
         frame = self.get_screenshot()
+        frame = Image.fromarray(frame, mode="RGB")
+        frame = hide_huds(frame)
+        frame = np.asarray(frame)
         # box is (x, y, l, h)
         classes, scores, boxes = self.model.detect(frame, self.CONFIDENCE_THRESHOLD, self.NMS_THRESHOLD)
         objects = []

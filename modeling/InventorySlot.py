@@ -7,8 +7,8 @@ class InventorySlot:
     def __init__(self, position):
         # position is the inventory slot, so 0-14, "Head", "Body" or "Hand"
         self.position = position
-        self.object = None
-        self.count = 0
+        self.object : InventoryObject = None
+        self.count : int = 0
 
     def is_full(self):
         if self.object is None:
@@ -43,13 +43,13 @@ class InventorySlot:
         if id_ is not None:
             self.add_item(id_, count)
 
-    def get_slot(self):
+    def get_slot_info(self) -> tuple[InventoryObject, int]:
         return self.object, self.count
 
     def trade_slot(self, other_slot):
         obj_help = self.object
         count_help = self.count
-        other_obj, other_count = other_slot.get_slot()
+        other_obj, other_count = other_slot.get_slot_info()
         if other_obj is not None:
             self.change_item(other_obj.id, other_count)
         else:

@@ -69,7 +69,12 @@ def generate_image(obj_list: list[int], obj_info: pd.DataFrame, img_name: str) -
     with Image.open(f"{bg_imgs_path}/{choose_random_in_array(all_bg_images)}") as image:
         positions = []
         for image_id in obj_list:
-            obj_folders = eval(obj_info.iloc[image_id]['image_paths'])
+            obj_folders_str = obj_info.iloc[image_id]['image_paths']
+            # removing brackets
+            obj_folders_str = obj_folders_str[1:-1]
+            obj_folders = obj_folders_str.split(",")
+            # strip to remove whitespace and removing single quotes
+            obj_folders = [elem.strip()[1:-1] for elem in obj_folders]
             obj_chosen = choose_random_in_array(obj_folders)
             all_folders = obj_chosen.split("+")
             width_list = []

@@ -99,16 +99,18 @@ class WorldModel:
         fy = (local_position.x1 - SCREEN_SIZE["width"]/2)/f
         heading = heading*math.pi/180
         pitch = pitch*math.pi/180
+        # extracted from the game code
+        follow_height = 1.5
         world_x = ((math.cos(heading)*fx
                 +math.sin(pitch)*math.sin(heading)*fy
-                +math.sin(pitch)*math.cos(heading)*fx*1.5/distance
-                +math.sin(heading)*fy*1.5/distance
-                -math.cos(pitch)*math.cos(heading)*1.5/distance)/(math.sin(pitch)+math.cos(pitch)*fx))*distance
+                +math.sin(pitch)*math.cos(heading)*fx*follow_height/distance
+                +math.sin(heading)*fy*follow_height/distance
+                -math.cos(pitch)*math.cos(heading)*follow_height/distance)/(math.sin(pitch)+math.cos(pitch)*fx))*distance
         world_z = ((math.sin(heading)*fx
                 -math.sin(pitch)*math.cos(heading)*fy
-                +math.sin(pitch)*math.sin(heading)*fx*1.5/distance
-                -math.cos(heading)*fy*1.5/distance
-                -math.cos(pitch)*math.sin(heading)*1.5/distance)/(math.sin(pitch)+math.cos(pitch)*fx))*distance
+                +math.sin(pitch)*math.sin(heading)*fx*follow_height/distance
+                -math.cos(heading)*fy*follow_height/distance
+                -math.cos(pitch)*math.sin(heading)*follow_height/distance)/(math.sin(pitch)+math.cos(pitch)*fx))*distance
         # in our world model, we'll use (x,z) as the two coordinates
         return Point2d(world_x, world_z)
 

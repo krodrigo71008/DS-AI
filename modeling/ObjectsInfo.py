@@ -128,7 +128,7 @@ class ObjectsInfo:
             "CutGrass": 40,
             "Twigs": 40,
             "Rot": 40,
-            "RottenEgg": 40,
+            "Berries": 40,
         }
         # this is for items with durability (axe, pickaxe, etc)
         self._name_to_max_uses = {

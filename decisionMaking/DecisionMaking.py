@@ -56,7 +56,7 @@ class DecisionMaking:
     # takes control when needed
     def emergency_system(self, modeling: Modeling):
         if modeling.player_model.hunger < 30:
-            foods = ["Seeds", "MonsterMeat", "Honey", "FrogLegs", "Meat"]
+            foods = ["Seeds", "MonsterMeat", "Honey", "FrogLegs", "Meat", "Berries"]
             food_counts = modeling.player_model.inventory.get_inventory_count(foods)
             # if we have no food, look for it
             if np.array(food_counts).sum() == 0:
