@@ -13,7 +13,8 @@ from utility.Visualizer import Visualizer
 from utility.Clock import ClockMock
 
 
-def test_modeling_with_recorded_inputs():
+def try_out_modeling_with_recorded_inputs():
+    LIMIT_IMAGES = 50
     route_start = 0
     with open(f"records/time_records_{route_start}.pkl", 'rb') as file:
         time_records = pickle.load(file)
@@ -35,7 +36,8 @@ def test_modeling_with_recorded_inputs():
         files_sort_aux.append((int(f.split("\\")[-1].split("_")[-1].split(".")[0]), f))
     files_sort_aux.sort()
     sorted_files = [f[1] for f in files_sort_aux]
-    # press p again to end the program
+    
+    i = 0
     for file, order in zip(sorted_files, orders):
         with Image.open(file) as raw_image:
             img = np.asarray(raw_image)
@@ -44,7 +46,12 @@ def test_modeling_with_recorded_inputs():
             vis_screen.draw_detected_objects(classes, scores, boxes)
             modeling.update_model(objects)
             corners = (modeling.world_model.c1, modeling.world_model.c2, modeling.world_model.c3, modeling.world_model.c4)
-            vis_screen.update_world_model(modeling.world_model.object_lists, modeling.player_model, corners, modeling.world_model.origin_coordinates)
+            vis_screen.update_world_model(modeling.world_model.object_lists, 
+                                            modeling.player_model, 
+                                            corners, 
+                                            modeling.world_model.origin_coordinates,
+                                            modeling.world_model.recent_objects,
+                                            modeling.world_model.estimation_pairs)
             vis_screen.draw_estimation_errors(modeling.world_model.estimation_errors)
             decision_making.decide(modeling)
             decision_making.secondary_action = order
@@ -52,5 +59,8 @@ def test_modeling_with_recorded_inputs():
             file_path_final = file.split('\\')[-1]
             vis_screen.export_results(f"tests/test_results/test_modeling_with_recorded/{file_path_final}")
             # print(f"{time.time() - start_time:.2f}: {modeling.player_model.position}, go_to {route[route_index]}, keys {control.key_action}")
+        i += 1
+        if i == LIMIT_IMAGES:
+            break
 
     print("end")

@@ -1,5 +1,6 @@
 import numpy as np
 from PIL import Image, ImageFont, ImageDraw
+from modeling.PlayerModel import PlayerModel
 
 from perception.screen import SCREEN_SIZE
 from modeling.constants import CHUNK_SIZE, DISTANCE_FOR_SAME_OBJECT
@@ -44,7 +45,7 @@ class Visualizer:
         draw.text((SCREEN_SIZE["width"]//2 + SCREEN_SIZE["width"]//4, SCREEN_SIZE["height"]//2+SCREEN_SIZE["height"]//4), 
             "O", fill="red", font=self.font, anchor="mm")
     
-    def update_world_model(self, objects, player, vision_corners, origin_coordinates):
+    def update_world_model(self, objects, player : PlayerModel, vision_corners, origin_coordinates, recent_objects, estimation_pairs):
         draw = ImageDraw.Draw(self.image)
         # draw outline
         draw.rectangle((0, 0, 
@@ -59,24 +60,51 @@ class Visualizer:
                 for obj in object_list:
                     world_objects.append(("Sapling", obj.position))
         player_position = player.position
-        self.draw_world_model(world_objects, player_position, vision_corners, origin_coordinates)
+        player_position_no_corrections = player.position_before_correction
+        new_recent_obj = [(type(obj_pair[0]).__name__, obj_pair[0].position) for obj_pair in recent_objects]
+        self.draw_world_model(world_objects, player_position, player_position_no_corrections,
+                                vision_corners, origin_coordinates, 
+                                new_recent_obj, estimation_pairs)
 
-    def draw_world_model(self, world_objects, player_position, vision_corners, origin_coordinates):
+    def draw_world_model(self, world_objects, player_position, player_position_no_corrections,
+                            vision_corners, origin_coordinates, recent_objects, estimation_pairs):
         if player_position is not None:
             x1_range = (player_position.x1 - self.CLOSE_OBJECTS_X1/2, player_position.x1 + self.CLOSE_OBJECTS_X1/2)
             x2_range = (player_position.x2 - self.CLOSE_OBJECTS_X2/2, player_position.x2 + self.CLOSE_OBJECTS_X2/2)
+            # estimation_pair is (estimate, position in modeling)
+            # yellow for estimates
+            for name, estimate, model_position in estimation_pairs:
+                if estimate.x1 > x1_range[0] and estimate.x1 < x1_range[1] and estimate.x2 > x2_range[0] and estimate.x2 < x2_range[1]:
+                    if name == "Grass":
+                        self.write_canvas(estimate.x1, estimate.x2, x1_range, x2_range, "G", "dimgray")
+                    elif name == "Sapling":
+                        self.write_canvas(estimate.x1, estimate.x2, x1_range, x2_range, "S", "dimgray")
+                    self.draw_line_world_canvas(estimate.x1, estimate.x2, model_position.x1, model_position.x2, x1_range, x2_range)
+            # black for objects in world model
             for name, position in world_objects:
                 if position.x1 > x1_range[0] and position.x1 < x1_range[1] and position.x2 > x2_range[0] and position.x2 < x2_range[1]:
                     if name == "Grass":
                         self.write_canvas(position.x1, position.x2, x1_range, x2_range, "G", "black")
                     elif name == "Sapling":
                         self.write_canvas(position.x1, position.x2, x1_range, x2_range, "S", "black")
+            # blue for recent objects
+            for name, position in recent_objects:
+                if position.x1 > x1_range[0] and position.x1 < x1_range[1] and position.x2 > x2_range[0] and position.x2 < x2_range[1]:
+                    if name == "Grass":
+                        self.write_canvas(position.x1, position.x2, x1_range, x2_range, "G", "blue")
+                    elif name == "Sapling":
+                        self.write_canvas(position.x1, position.x2, x1_range, x2_range, "S", "blue")
+
+            # player position related
+            self.write_canvas(player_position_no_corrections.x1, player_position_no_corrections.x2, x1_range, x2_range, "P", "dimgray")
             self.write_canvas(player_position.x1, player_position.x2, x1_range, x2_range, "P", "black")
+            self.draw_line_world_canvas(player_position.x1, player_position.x2, 
+                                        player_position_no_corrections.x1, player_position_no_corrections.x2, 
+                                        x1_range, x2_range)
+
             self.write_canvas(origin_coordinates.x1 ,origin_coordinates.x2,  x1_range, x2_range, "O", "red")
-            self.player_position = None
-            self.world_objects = []
-            self.draw_quadrilateral(vision_corners, x1_range, x2_range)
-            self.draw_chunk_lines(CHUNK_SIZE, x1_range, x2_range)
+            self.draw_quadrilateral_world_canvas(vision_corners, x1_range, x2_range)
+            self.draw_chunk_lines_world_canvas(CHUNK_SIZE, x1_range, x2_range)
 
     def draw_estimation_errors(self, estimation_errors : list[Point2d]):
         draw = ImageDraw.Draw(self.image)
@@ -95,7 +123,13 @@ class Visualizer:
             draw.line((center_x, center_y, 
                     center_x+error.x2*self.MAX_ERROR_LENGTH/DISTANCE_FOR_SAME_OBJECT, 
                     center_y+error.x1*self.MAX_ERROR_LENGTH/DISTANCE_FOR_SAME_OBJECT), fill="black", width=2)
+        draw.text((center_x, center_y), "O", fill="red", font=self.font, anchor="mm")
 
+    def draw_line_world_canvas(self, p1_x1, p1_x2, p2_x1, p2_x2, x1_range, x2_range):
+        conv_est_x, conv_est_y = self.convert_world_coords_to_world_graph(p1_x1, p1_x2, x1_range, x2_range)
+        conv_mod_x, conv_mod_y = self.convert_world_coords_to_world_graph(p2_x1, p2_x2, x1_range, x2_range)
+        draw = ImageDraw.Draw(self.image)
+        draw.line((conv_est_x, conv_est_y, conv_mod_x, conv_mod_y), fill="dimgray")
 
 
     def _get_multiples_in_range(self, number : int, range_ : tuple[int, int]) -> list[int]:
@@ -120,7 +154,7 @@ class Visualizer:
         y = (x1 - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
         return x, y
     
-    def draw_chunk_lines(self, chunk_size, x1_range, x2_range):
+    def draw_chunk_lines_world_canvas(self, chunk_size, x1_range, x2_range):
         x1_lines = self._get_multiples_in_range(chunk_size, x1_range)
         x2_lines = self._get_multiples_in_range(chunk_size, x2_range)
         draw = ImageDraw.Draw(self.image)
@@ -133,7 +167,7 @@ class Visualizer:
             x, _ = self.convert_world_coords_to_world_graph(0, x2, x1_range, x2_range)
             draw.line((x, 0, x, self.WORLD_CANVAS_HEIGHT), fill="blue")
 
-    def draw_quadrilateral(self, vertices, x1_range, x2_range):
+    def draw_quadrilateral_world_canvas(self, vertices, x1_range, x2_range):
         p1_x, p1_y = self.convert_world_coords_to_world_graph(vertices[0].x1, vertices[0].x2, x1_range, x2_range)
         p2_x, p2_y = self.convert_world_coords_to_world_graph(vertices[1].x1, vertices[1].x2, x1_range, x2_range)
         p3_x, p3_y = self.convert_world_coords_to_world_graph(vertices[2].x1, vertices[2].x2, x1_range, x2_range)

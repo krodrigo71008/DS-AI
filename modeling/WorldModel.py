@@ -50,6 +50,7 @@ class WorldModel:
         self.c3 : Point2d = None
         self.c4 : Point2d = None
         self.estimation_errors : list[Point2d] = []
+        self.estimation_pairs : list[tuple[Point2d, Point2d]] = []
         self.avg_observed_error : Point2d = None
         self.recent_objects : list[list[ObjectModel, int]] = []
         self.additions_to_recent_objects : list[list[ObjectModel, int]] = []
@@ -163,6 +164,7 @@ class WorldModel:
         self.detected_this_cycle.extend([[pair[0], False] for pair in self.recent_objects])
         self.estimation_errors = []
         self.additions_to_recent_objects = []
+        self.estimation_pairs = []
 
     # positions are Point2d
     def local_to_almost_global_position(self, local_position : Point2d, 
@@ -243,8 +245,8 @@ class WorldModel:
         # getting object from pair (obj, cycle_count)
         objects_to_analyze.extend([pair[0] for pair in self.recent_objects])
 
-        best_match = None
-        lowest_distance = None
+        best_match : ObjectModel = None
+        lowest_distance : float = None
         for obj in objects_to_analyze:
             # if the object is close enough to an already detected object of the same type
             if pos.distance(obj.position) < DISTANCE_FOR_SAME_OBJECT and type(obj).__name__ == obj_name:
@@ -265,10 +267,15 @@ class WorldModel:
             if best_match in [pair[0] for pair in self.detected_this_cycle]:
                 obj_index = [pair[0] for pair in self.detected_this_cycle].index(best_match)
                 self.detected_this_cycle[obj_index][1] = True
+                # if it's in the recent objects list, update its position
+                if best_match in [pair[0] for pair in self.recent_objects]:
+                    # maybe there's a better way, but for now just update its position
+                    best_match.position = pos
             if isinstance(best_match, ObjectWithMultipleForms):
                 best_match.handle_object_detected(image_obj.id)
             # this is the error from the position in modeling to the one being observed now 
             self.estimation_errors.append(pos - best_match.position)
+            self.estimation_pairs.append((type(best_match).__name__, pos, best_match.position))
         # if obj_name in self.object_lists:
         #     self.object_lists[obj_name].append(obj)
         # else:

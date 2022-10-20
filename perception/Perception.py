@@ -16,7 +16,7 @@ class Perception:
     def __init__(self, debug=False, queue=None):
         with open("perception/darknet/obj.names", "r") as f:
             self.class_names = [cname.strip() for cname in f.readlines()]
-        self.CONFIDENCE_THRESHOLD = 0.01
+        self.CONFIDENCE_THRESHOLD = 0.9
         self.NMS_THRESHOLD = 0.45
         net = cv2.dnn.readNet("perception/darknet/yolov4-tiny-custom_final.weights", "perception/darknet/yolov4-tiny-custom.cfg")
         net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT)

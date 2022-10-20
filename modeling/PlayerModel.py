@@ -8,6 +8,7 @@ from modeling.constants import PLAYER_BASE_SPEED
 class PlayerModel:
     def __init__(self, clock):
         self.position : Point2d = Point2d(0, 0)
+        self.position_before_correction : Point2d = Point2d(0, 0)
         self.clock : Clock = clock
         self.inventory = Inventory()
         self.health = 150
@@ -18,7 +19,7 @@ class PlayerModel:
         self.max_sanity = 200
         self.speed = PLAYER_BASE_SPEED
         self.direction : float = None
-        self.CORRECTION_GAIN = 0
+        self.CORRECTION_GAIN = 0.9
 
     def move(self, dt : float) -> None:
         """Moves the player model in the current direction
@@ -47,4 +48,5 @@ class PlayerModel:
             self.sanity -= self.clock.dt()*5/60
 
     def correct_error(self, err : Point2d):
+        self.position_before_correction = self.position
         self.position -= err*self.CORRECTION_GAIN
