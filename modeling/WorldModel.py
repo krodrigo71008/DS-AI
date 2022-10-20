@@ -49,6 +49,10 @@ class WorldModel:
         self.c2 : Point2d = None
         self.c3 : Point2d = None
         self.c4 : Point2d = None
+        self.c1_deletion_border : Point2d = None
+        self.c2_deletion_border : Point2d = None
+        self.c3_deletion_border : Point2d = None
+        self.c4_deletion_border : Point2d = None
         self.estimation_errors : list[Point2d] = []
         self.estimation_pairs : list[tuple[Point2d, Point2d]] = []
         self.avg_observed_error : Point2d = None
@@ -149,6 +153,10 @@ class WorldModel:
         self.c2 = self.local_to_global_position(Point2d(0, SCREEN_SIZE["height"]), heading, pitch, distance, fov)
         self.c3 = self.local_to_global_position(Point2d(SCREEN_SIZE["width"], SCREEN_SIZE["height"]), heading, pitch, distance, fov)
         self.c4 = self.local_to_global_position(Point2d(SCREEN_SIZE["width"], 0), heading, pitch, distance, fov)
+        self.c1_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.1, SCREEN_SIZE["height"]*0.1), heading, pitch, distance, fov)
+        self.c2_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.1, SCREEN_SIZE["height"]*0.9), heading, pitch, distance, fov)
+        self.c3_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.9, SCREEN_SIZE["height"]*0.9), heading, pitch, distance, fov)
+        self.c4_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.9, SCREEN_SIZE["height"]*0.1), heading, pitch, distance, fov)
         # chunks in the trapezoid view
         cur_chunk_list = self.get_current_chunks()
         # objects in our modeling that should be currently rendered, paired with a flag indicating 
@@ -336,16 +344,22 @@ class WorldModel:
                 if detected:
                     obj.cycles_to_be_deleted = CYCLES_FOR_OBJECT_REMOVAL
                 else:
-                    obj.cycles_to_be_deleted -= 1
-                    if obj.cycles_to_be_deleted == 0:
-                        obj_name = type(obj).__name__
-                        obj_list = self.object_lists[obj_name]
-                        obj_index = obj_list.index(obj)
-                        del obj_list[obj_index]
-                        chunk_index = self.point_to_chunk_index(obj.position)
-                        chunk_obj_list = self.objects_by_chunks[chunk_index]
-                        obj_index_in_chunk_list = chunk_obj_list.index(obj)
-                        del chunk_obj_list[obj_index_in_chunk_list]
+                    # we make it so that objects on the screen border aren't deleted if they aren't seen for a while
+                    # since they often are offscreen or blocked by HUD
+                    if is_inside_convex_polygon([self.c1_deletion_border, 
+                                                    self.c2_deletion_border,
+                                                    self.c3_deletion_border, 
+                                                    self.c4_deletion_border], obj.position):
+                        obj.cycles_to_be_deleted -= 1
+                        if obj.cycles_to_be_deleted == 0:
+                            obj_name = type(obj).__name__
+                            obj_list = self.object_lists[obj_name]
+                            obj_index = obj_list.index(obj)
+                            del obj_list[obj_index]
+                            chunk_index = self.point_to_chunk_index(obj.position)
+                            chunk_obj_list = self.objects_by_chunks[chunk_index]
+                            obj_index_in_chunk_list = chunk_obj_list.index(obj)
+                            del chunk_obj_list[obj_index_in_chunk_list]
 
         # adding new recent objects 
         self.recent_objects.extend(self.additions_to_recent_objects)

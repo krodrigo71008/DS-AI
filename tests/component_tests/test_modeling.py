@@ -263,7 +263,7 @@ def aux_modeling_object_deletion(test_case):
     bounding_boxes = [(0, 0, width*0.1, height*0.1), 
                         (width*0.4, height*0.1, width*0.2, height*0.2),
                         (width*0.1, height*0.4, width*0.2, height*0.2),
-                        (width*0.8, height*0.8, width*0.1, height*0.2),
+                        (width*0.8, height*0.7, width*0.1, height*0.15),
                         (0, height*0.6, width*0.2, height*0.1)]
     with open("perception/darknet/obj.names") as file:
         lines = [line.strip() for line in file.readlines()]
@@ -273,7 +273,7 @@ def aux_modeling_object_deletion(test_case):
     objects = [ImageObject(grass_id, score, bb) for bb in bounding_boxes]
 
     input_sequence, expected = test_case
-    for obj in objects:
+    for i, obj in enumerate(objects):
         modeling = Modeling(clock=Clock())
         modeling.update_model([obj])
         modeling.update_model([obj])
@@ -286,17 +286,24 @@ def aux_modeling_object_deletion(test_case):
         total_obj_list_len = 0
         for _, obj_list in modeling.world_model.object_lists.items():
             total_obj_list_len += len(obj_list)
-        if total_obj_list_len > 0 and not expected:
-            return False
-        elif total_obj_list_len == 0 and expected:
-            return False
         total_objs_by_chunk_len = 0
         for _, obj_list in modeling.world_model.objects_by_chunks.items():
             total_objs_by_chunk_len += len(obj_list)
-        if total_objs_by_chunk_len > 0 and not expected:
-            return False
-        elif total_objs_by_chunk_len == 0 and expected:
-            return False
+        # i = 0 is the only case with the object too close to the edge of the screen 
+        if i == 0:
+            if total_obj_list_len == 0:
+                return False
+            if total_objs_by_chunk_len == 0:
+                return False
+        else:
+            if total_obj_list_len > 0 and not expected:
+                return False
+            elif total_obj_list_len == 0 and expected:
+                return False
+            if total_objs_by_chunk_len > 0 and not expected:
+                return False
+            elif total_objs_by_chunk_len == 0 and expected:
+                return False
     return True
 
 # start 32

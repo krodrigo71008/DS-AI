@@ -1,5 +1,6 @@
 import numpy as np
 from PIL import Image, ImageFont, ImageDraw
+from modeling.Modeling import Modeling
 from modeling.PlayerModel import PlayerModel
 
 from perception.screen import SCREEN_SIZE
@@ -45,7 +46,17 @@ class Visualizer:
         draw.text((SCREEN_SIZE["width"]//2 + SCREEN_SIZE["width"]//4, SCREEN_SIZE["height"]//2+SCREEN_SIZE["height"]//4), 
             "O", fill="red", font=self.font, anchor="mm")
     
-    def update_world_model(self, objects, player : PlayerModel, vision_corners, origin_coordinates, recent_objects, estimation_pairs):
+    def update_world_model(self, modeling : Modeling):
+        objects = modeling.world_model.object_lists
+        player = modeling.player_model
+        vision_corners = (modeling.world_model.c1, modeling.world_model.c2, modeling.world_model.c3, modeling.world_model.c4)
+        deletion_corners = (modeling.world_model.c1_deletion_border,
+                            modeling.world_model.c2_deletion_border,
+                            modeling.world_model.c3_deletion_border, 
+                            modeling.world_model.c4_deletion_border)
+        origin_coordinates = modeling.world_model.origin_coordinates
+        recent_objects = modeling.world_model.recent_objects
+        estimation_pairs = modeling.world_model.estimation_pairs
         draw = ImageDraw.Draw(self.image)
         # draw outline
         draw.rectangle((0, 0, 
@@ -63,11 +74,11 @@ class Visualizer:
         player_position_no_corrections = player.position_before_correction
         new_recent_obj = [(type(obj_pair[0]).__name__, obj_pair[0].position) for obj_pair in recent_objects]
         self.draw_world_model(world_objects, player_position, player_position_no_corrections,
-                                vision_corners, origin_coordinates, 
+                                vision_corners, deletion_corners, origin_coordinates, 
                                 new_recent_obj, estimation_pairs)
 
     def draw_world_model(self, world_objects, player_position, player_position_no_corrections,
-                            vision_corners, origin_coordinates, recent_objects, estimation_pairs):
+                            vision_corners, deletion_corners, origin_coordinates, recent_objects, estimation_pairs):
         if player_position is not None:
             x1_range = (player_position.x1 - self.CLOSE_OBJECTS_X1/2, player_position.x1 + self.CLOSE_OBJECTS_X1/2)
             x2_range = (player_position.x2 - self.CLOSE_OBJECTS_X2/2, player_position.x2 + self.CLOSE_OBJECTS_X2/2)
@@ -103,7 +114,8 @@ class Visualizer:
                                         x1_range, x2_range)
 
             self.write_canvas(origin_coordinates.x1 ,origin_coordinates.x2,  x1_range, x2_range, "O", "red")
-            self.draw_quadrilateral_world_canvas(vision_corners, x1_range, x2_range)
+            self.draw_quadrilateral_world_canvas(vision_corners, x1_range, x2_range, "black")
+            self.draw_quadrilateral_world_canvas(deletion_corners, x1_range, x2_range, "red")
             self.draw_chunk_lines_world_canvas(CHUNK_SIZE, x1_range, x2_range)
 
     def draw_estimation_errors(self, estimation_errors : list[Point2d]):
@@ -167,13 +179,13 @@ class Visualizer:
             x, _ = self.convert_world_coords_to_world_graph(0, x2, x1_range, x2_range)
             draw.line((x, 0, x, self.WORLD_CANVAS_HEIGHT), fill="blue")
 
-    def draw_quadrilateral_world_canvas(self, vertices, x1_range, x2_range):
+    def draw_quadrilateral_world_canvas(self, vertices, x1_range, x2_range, color):
         p1_x, p1_y = self.convert_world_coords_to_world_graph(vertices[0].x1, vertices[0].x2, x1_range, x2_range)
         p2_x, p2_y = self.convert_world_coords_to_world_graph(vertices[1].x1, vertices[1].x2, x1_range, x2_range)
         p3_x, p3_y = self.convert_world_coords_to_world_graph(vertices[2].x1, vertices[2].x2, x1_range, x2_range)
         p4_x, p4_y = self.convert_world_coords_to_world_graph(vertices[3].x1, vertices[3].x2, x1_range, x2_range)
         draw = ImageDraw.Draw(self.image)
-        draw.polygon([p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, p4_x, p4_y], outline="black")
+        draw.polygon([p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, p4_x, p4_y], outline=color)
 
     def export_results(self, output_path : str):
         self.image.save(output_path)

@@ -45,13 +45,7 @@ def try_out_modeling_with_recorded_inputs():
             vis_screen.update_image(img[:, :, ::-1])
             vis_screen.draw_detected_objects(classes, scores, boxes)
             modeling.update_model(objects)
-            corners = (modeling.world_model.c1, modeling.world_model.c2, modeling.world_model.c3, modeling.world_model.c4)
-            vis_screen.update_world_model(modeling.world_model.object_lists, 
-                                            modeling.player_model, 
-                                            corners, 
-                                            modeling.world_model.origin_coordinates,
-                                            modeling.world_model.recent_objects,
-                                            modeling.world_model.estimation_pairs)
+            vis_screen.update_world_model(modeling)
             vis_screen.draw_estimation_errors(modeling.world_model.estimation_errors)
             decision_making.decide(modeling)
             decision_making.secondary_action = order
