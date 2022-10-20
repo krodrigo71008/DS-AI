@@ -2,7 +2,7 @@ import os
 
 from PIL import Image
 
-from utility.utility import hide_huds
+from utility.utility import hide_huds_and_player
 
 # (65, 190), (65, 890) closed crafting tabs
 # (420, 1010), (1500, 1010) inventory
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     for image_path in all_images:
         full_path = f"{imgs_path}/{image_path}"
         with Image.open(full_path) as image:
-            image = hide_huds(image)
+            image = hide_huds_and_player(image)
             image.save(f"perception/processed_bg_images/{image_path}")
 
 

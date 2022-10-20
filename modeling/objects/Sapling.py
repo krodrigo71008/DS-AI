@@ -24,8 +24,15 @@ class Sapling(ObjectWithMultipleForms):
         if state == SAPLING_READY:
             self.set_state(SAPLING_READY)
         else:
-            self.update_function("grow", GameTime(non_winter_days=4), self)
             self.set_state(SAPLING_HARVESTED)
+
+    def harvest(self):
+        if self._state == SAPLING_HARVESTED:
+            raise Exception("Cannot harvest: already harvested!")
+        self.handle_object_detected(SAPLING_HARVESTED)
+
+    def is_harvested(self) -> bool:
+        return self._state == SAPLING_HARVESTED
 
     def set_state(self, state):
         if state not in self.object_ids:

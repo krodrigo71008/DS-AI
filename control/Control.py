@@ -1,23 +1,24 @@
 import math
 from random import randint
 from math import sqrt, pi
-from typing import List
-import time
 
-from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, KEYPRESS_DURATION, MOUSE_CLICK_DURATION
+from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, PICK_UP_DURATION, RUN_DURATION
 from decisionMaking.DecisionMaking import DecisionMaking
+from decisionMaking.constants import PICK_UP_DISTANCE
 from modeling.Modeling import Modeling
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
 from modeling.constants import CAMERA_HEADING
 from utility.Point2d import Point2d
+from utility.Clock import Clock
 from utility.utility import clamp2pi
 
 
 class Control:
-    def __init__(self, debug=False, queue=None):
+    def __init__(self, debug=False, queue=None, clock=Clock()):
         self.key_action = None
         self.mouse_action = None
+        self.clock : Clock = clock
         self.crafting_open = False
         self.current_crafting_tab = 0
         self.crafting_tree_1 = {
@@ -38,6 +39,7 @@ class Control:
         self.action_in_progress = False
         self.start_time = None
         self.update_at_end = None
+        self.current_action = None
         self.action_on_cooldown = True
         self.debug = debug
         self.just_finished_action = False
@@ -46,41 +48,62 @@ class Control:
             self.queue = queue
 
     def control(self, decision_making: DecisionMaking, modeling: Modeling):
-        self.just_finished_action = False
+        self.clock.update()
         # secondary_action is (action, payload)
         secondary_action = decision_making.secondary_action
+        should_continue = True
         if self.action_in_progress:
             # if this returns False, we should interrupt this iteration
             if not self.continue_action(modeling):
-                return
-        if secondary_action[0] == "eat":
-            self.eat(secondary_action[1], modeling)
-            self.action_in_progress = True
-            self.start_time = time.time()
-        elif secondary_action[0] == "craft":
-            self.craft(secondary_action[1])
-            self.action_in_progress = True
-            self.start_time = time.time()
-        elif secondary_action[0] == "go_to":
-            self.go_towards(secondary_action[1], modeling)
-            self.action_in_progress = True
-            self.start_time = time.time()
-        elif secondary_action[0] == "run":
-            self.run(secondary_action[1])
-            self.action_in_progress = True
-            self.start_time = time.time()
-        elif secondary_action[0] == "explore":
-            self.explore(modeling)
-            self.action_in_progress = True
-            self.start_time = time.time()
-        elif secondary_action[0] == "pick_up_item":
-            self.pick_up(secondary_action[1])
-            self.action_in_progress = True
-            self.start_time = time.time()
-        elif secondary_action[0] == "equip":
-            self.equip(secondary_action[1], modeling)
-            self.action_in_progress = True
-            self.start_time = time.time()
+                should_continue = False
+        if should_continue:
+            self.just_finished_action = False
+            if secondary_action[0] == "eat":
+                # this is a one step action
+                self.eat(secondary_action[1], modeling)
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
+            elif secondary_action[0] == "craft":
+                # this is a multiple step action
+                # one step is one key press
+                self.craft(secondary_action[1])
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
+            elif secondary_action[0] == "go_to":
+                # this is a multiple step process
+                # one step is walking for a bit
+                self.go_towards(secondary_action[1], modeling)
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
+            elif secondary_action[0] == "run":
+                # this is a multiple step process
+                # one step is walking for a bit
+                self.run(secondary_action[1])
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
+            elif secondary_action[0] == "explore":
+                # this is a multiple step process
+                # one step is walking for a bit
+                self.explore(modeling)
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
+            elif secondary_action[0] == "pick_up_item":
+                # this is a one step process
+                self.pick_up(secondary_action[1])
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
+            elif secondary_action[0] == "equip":
+                # this is a one step process
+                self.equip(secondary_action[1], modeling)
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
         if self.debug:
             self.records.append((self.key_action, self.mouse_action, self.action_on_cooldown))
             if self.queue is not None:
@@ -95,38 +118,71 @@ class Control:
         :return: True if the rest of control should run, False if it should be interrupted
         :rtype: bool
         """
+        if self.current_action == "eat":
+            if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "craft":
+            self.action_on_cooldown = True
+            if self.clock.time() - self.start_time >= KEYPRESS_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "go_to":
+            if self.clock.time() - self.start_time >= RUN_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "run":
+            if self.clock.time() - self.start_time >= RUN_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "explore":
+            if self.clock.time() - self.start_time >= KEYPRESS_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "pick_up_item":
+            if self.clock.time() - self.start_time >= PICK_UP_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "equip":
+            if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
+                self.action_in_progress = False
+
         # each action has different signals for stopping, this will probably be changed someday
-        if self.key_action is not None:
-            if self.key_action[1] == "press_and_release":
-                self.action_on_cooldown = True
-            if time.time() - self.start_time >= KEYPRESS_DURATION:
-                self.action_in_progress = False
-        if self.mouse_action is not None:
-            if time.time() - self.start_time >= MOUSE_CLICK_DURATION:
-                self.action_in_progress = False
+        # if self.key_action is not None:
+        #     if self.key_action[1] == "press_and_release":
+        #         self.action_on_cooldown = True
+        #     if time.time() - self.start_time >= KEYPRESS_DURATION:
+        #         self.action_in_progress = False
+        # if self.mouse_action is not None:
+        #     if time.time() - self.start_time >= MOUSE_CLICK_DURATION:
+        #         self.action_in_progress = False
+        
         if self.action_in_progress == False and self.update_at_end is not None:
             return_value = None
             if self.update_at_end[0] == "pick_up":
                 obj_name = type(self.update_at_end[1]).__name__
                 if obj_name == "BerryBush":
-                    modeling.player_model.inventory.add_item("Berry")
-                elif obj_name == "Honey":
-                    modeling.player_model.inventory.add_item("Honey")
-                elif obj_name == "Carrot":
-                    modeling.player_model.inventory.add_item("Carrot")
+                    modeling.player_model.inventory.add_item("Berry", 1)
+                    self.update_at_end[1].harvest()
+                elif obj_name == "Grass":
+                    modeling.player_model.inventory.add_item("CutGrass", 1)
+                    self.update_at_end[1].harvest()
+                elif obj_name == "Sapling":
+                    modeling.player_model.inventory.add_item("Twigs", 1)
+                    self.update_at_end[1].harvest()
+                else:
+                    modeling.player_model.inventory.add_item(obj_name, 1)
                 return_value = False
+                self.just_finished_action = True
             elif self.update_at_end[0] == "eat":
                 food_stats = objects_info.get_item_info(info="food_stats", name=self.update_at_end[1])
                 modeling.player_model.health += food_stats[0]
                 modeling.player_model.hunger += food_stats[1]
                 modeling.player_model.sanity += food_stats[2]
                 return_value = False
+                self.just_finished_action = True
             elif self.update_at_end[0] == "equip":
                 modeling.player_model.inventory.equip_item(self.update_at_end[1])
                 return_value = False
+                self.just_finished_action = True
             elif self.update_at_end[0] == "craft":
                 modeling.player_model.inventory.craft(self.update_at_end[1])
                 return_value = False
+                self.just_finished_action = True
             elif self.update_at_end[0] == "change_inv_state":
                 change = self.update_at_end[1]
                 if change == "up":
@@ -139,10 +195,10 @@ class Control:
                     self.crafting_tabs_states[self.current_crafting_tab] += 1
                 return_value = True
             elif self.update_at_end[0] == "reset_player_direction":
-                modeling.player_model.set_direction("none")
+                modeling.player_model.set_direction(None)
                 return_value = True
+                self.just_finished_action = True
             self.update_at_end = None
-            self.just_finished_action = True
             return return_value
         if self.debug:
             self.records.append((self.key_action, self.mouse_action, self.action_on_cooldown))
@@ -176,7 +232,7 @@ class Control:
                 self.update_at_end = ("equip", equip_name)
                 return
 
-    def craft(self, things_to_craft: List[str]):
+    def craft(self, things_to_craft: list[str]):
         self.action_on_cooldown = False
         if not self.crafting_open:
             self.key_action = (["caps_lock"], "press_and_release")
@@ -210,50 +266,55 @@ class Control:
 
     def go_towards(self, objective: Point2d, modeling: Modeling):
         player_position = modeling.player_model.position
+        # PICK_UP_DISTANCE
+        if objective.distance(player_position) < PICK_UP_DISTANCE:
+            self.key_action = None
+            self.mouse_action = None
+            return
         # direction_to_move is in radians
         direction_to_move = (objective - player_position).angle()
-        modeling.player_model.set_direction(round(direction_to_move/(pi/4)))
+        modeling.player_model.set_direction(round(direction_to_move/(pi/4))*pi/4)
         keys = self.global_direction_to_key_commands(direction_to_move)
         self.key_action = (keys, "press")
         self.mouse_action = None
-        self.update_at_end = ("reset_player_direction")
+        self.update_at_end = ("reset_player_direction",)
 
     def run(self, direction_to_run : float):
         keys = self.global_direction_to_key_commands(direction_to_run)
         self.key_action = (keys, "press")
         self.mouse_action = None
-        self.update_at_end = ("reset_player_direction")
+        self.update_at_end = ("reset_player_direction",)
 
     @staticmethod
     def global_direction_to_key_commands(global_direction : float) -> list[str]:
         # correcting to account for camera heading
         direction_to_move_from_camera = clamp2pi(global_direction - CAMERA_HEADING*math.pi/180)
-        # discretized_direction between -4 and 4, 0 aligned with camera direction and increasing clockwise
+        # discretized_direction between -4 and 4, 0 aligned with camera direction and increasing counterclockwise
         discretized_direction = round(direction_to_move_from_camera/(pi/4))
         if discretized_direction == -4:
             # up
             keys = ["w"]
         elif discretized_direction == -3:
-            # up_right
-            keys = ["w", "d"]
+            # up_left
+            keys = ["w", "a"]
         elif discretized_direction == -2:
-            # right
-            keys = ["d"]
+            # left
+            keys = ["a"]
         elif discretized_direction == -1:
-            # down_right
-            keys = ["s", "d"]
+            # down_left
+            keys = ["s", "a"]
         elif discretized_direction == 0:
             # down
             keys = ["s"]
         elif discretized_direction == 1:
-            # down_left
-            keys = ["s", "a"]
+            # down_right
+            keys = ["s", "d"]
         elif discretized_direction == 2:
-            # left
-            keys = ["a"]
+            # right
+            keys = ["d"]
         elif discretized_direction == 3:
-            # up_left
-            keys = ["w", "a"]
+            # up_right
+            keys = ["w", "d"]
         elif discretized_direction == 4:
             # up
             keys = ["w"]

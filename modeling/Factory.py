@@ -20,8 +20,8 @@ class Factory:
 
     # receives image id and returns an object
     @staticmethod
-    def create_object(id_, pos, update_function=None):
-        obj_id = objects_info.get_item_info(info="obj_id", image_id=id_)
+    def create_object(image_id, pos, update_function=None):
+        obj_id = objects_info.get_item_info(info="obj_id", image_id=image_id)
         if obj_id == 1:
             return TallbirdNest(pos)
         if obj_id == 2:
@@ -29,9 +29,9 @@ class Factory:
         if obj_id == 3:
             return Flower(pos)
         if obj_id == 4:
-            return Grass(pos, id_, update_function)
+            return Grass(pos, image_id, update_function)
         if obj_id == 5:
-            return Sapling(pos, id_, update_function)
+            return Sapling(pos, image_id, update_function)
         if obj_id == 6:
             return PickableObjectModel(pos, obj_id, "Seeds")
         if obj_id == 7:
@@ -45,11 +45,11 @@ class Factory:
         if obj_id == 11:
             return Ashes(pos, update_function)
         if obj_id == 12:
-            return TreeEvergreen(pos, id_, update_function)
+            return TreeEvergreen(pos, image_id, update_function)
         if obj_id == 13:
-            return SpiderNest(pos, id_, update_function)
+            return SpiderNest(pos, image_id, update_function)
         if obj_id == 14:
-            return BerryBush(pos, id_, update_function)
+            return BerryBush(pos, image_id, update_function)
         if obj_id == 15:
             return PickableObjectModel(pos, obj_id, "Honey")
         if obj_id == 16:
@@ -67,7 +67,7 @@ class Factory:
         if obj_id == 22:
             return PickableObjectModel(pos, obj_id, "Carrot")
         if obj_id == 23:
-            return Campfire(pos, id_, update_function)
+            return Campfire(pos, image_id, update_function)
         if obj_id == 24:
             return PickableObjectModel(pos, obj_id, "SpiderGland")
         if obj_id == 25:

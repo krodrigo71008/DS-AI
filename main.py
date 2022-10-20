@@ -1,6 +1,7 @@
-import keyboard
 import time
 import threading
+
+import keyboard
 
 from action.Action import Action
 from control.Control import Control
@@ -20,12 +21,12 @@ def main(q=None):
     control = Control(debug=q is not None, queue=q)
     decision_making = DecisionMaking(debug=q is not None, queue=q)
     modeling = Modeling(debug=q is not None, queue=q)
-    perception = Perception()
+    perception = Perception(debug=q is not None, queue=q)
     time.sleep(0.1)
     # press p again to end the program
     while not keyboard.is_pressed("p"):
         tr.start()
-        objects = perception.perceive()
+        objects = perception.perceive()[0]
         tr.split()
         modeling.update_model(objects)
         tr.split()
@@ -35,6 +36,7 @@ def main(q=None):
         tr.split()
         action.act(control)
         tr.end()
+        time.sleep(0.3)
     print("end")
 
 if __name__ == "__main__":

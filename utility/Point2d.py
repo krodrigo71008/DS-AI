@@ -6,6 +6,10 @@ class Point2d:
         self.x1 = x1
         self.x2 = x2
 
+    @classmethod
+    def from_box(cls, box : tuple[int, int, int, int]):
+        return cls(box[0]+box[2]//2, box[1]+box[3])
+
     def __add__(self, other):
         return Point2d(self.x1 + other.x1, self.x2 + other.x2)
 

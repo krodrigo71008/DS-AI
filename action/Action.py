@@ -23,6 +23,8 @@ class Action:
                 if not control.action_on_cooldown:
                     keyboard.press_and_release('+'.join(key_action[0]))
                     self.current_keys = self.current_keys.difference(key_action[0])
+        else:
+            keyboard.release('+'.join(self.current_keys))
         if mouse_action is not None:
             if mouse_action[0] == "click":
                 mouse.move(mouse_action[1].x1, mouse_action[1].x2)

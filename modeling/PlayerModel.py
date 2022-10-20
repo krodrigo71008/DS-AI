@@ -18,6 +18,7 @@ class PlayerModel:
         self.max_sanity = 200
         self.speed = PLAYER_BASE_SPEED
         self.direction : float = None
+        self.CORRECTION_GAIN = 0
 
     def move(self, dt : float) -> None:
         """Moves the player model in the current direction
@@ -45,7 +46,5 @@ class PlayerModel:
         if day_section == "Dusk" or day_section == "Night":
             self.sanity -= self.clock.dt()*5/60
 
-    def player_detected(self, image_obj):
-        # not sure what to do here, i'll probably use this when I start tracking what
-        # the camera should be capturing, like to detect when objects were deleted
-        pass
+    def correct_error(self, err : Point2d):
+        self.position -= err*self.CORRECTION_GAIN

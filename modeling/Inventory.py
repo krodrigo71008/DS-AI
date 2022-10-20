@@ -133,7 +133,7 @@ class Inventory:
                 return True
         else:
             # add item to existing stack and possibly fill new slot
-            if (self.slots[first_non_full_slot] + count <=
+            if (self.slots[first_non_full_slot].count + count <=
                     objects_info.get_item_info(info="stack_size", name=name)):
                 self.slots[first_non_full_slot].add_item(
                     objects_info.get_item_info(info="obj_id", name=name), count)
@@ -320,7 +320,7 @@ class Inventory:
         for slot in self.slots.values():
             if slot.object is not None:
                 if (objects_info.get_item_info(info="spoil_time",
-                                               obj_id=slot.object.id).seconds() is not None):
+                                               obj_id=slot.object.id) is not None):
                     slot.object.spoilage -= GameTime(seconds=dt)
                     if slot.object.spoilage <= GameTime(seconds=0):
                         slot.object.rot()

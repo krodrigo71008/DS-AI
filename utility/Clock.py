@@ -3,10 +3,10 @@ from utility.GameTime import GameTime
 
 
 class Clock:
-    def __init__(self, start_time=0):
+    def __init__(self, start_time=0.):
         # time in seconds is supposed to be the time in seconds since the game started 
         # (for example, at the end of the first day this should be 480)
-        self.time_in_seconds = start_time
+        self.time_in_seconds : float = start_time
         self._last_time = time.time()
         self._last_dt = None
         self.dusk_start = [8, 8, 9, 9, 9, 9, 10, 10, 10, 10,
@@ -89,3 +89,29 @@ class Clock:
         else:
             return "Night"
 
+
+class ClockMock(Clock):
+    def __init__(self, start_time=0, initial_last_time=0):
+        super().__init__(start_time)
+        self.times_to_return = []
+        self.current_time_index = 0
+        self._last_time = initial_last_time
+
+    def update(self):
+        current_time = self.times_to_return[self.current_time_index]
+        self.current_time_index += 1
+        self.time_in_seconds += current_time - self._last_time
+        self._last_dt = current_time - self._last_time
+        self._last_time = current_time
+
+class ClockRecorder(Clock):
+    def __init__(self, start_time=0):
+        super().__init__(start_time)
+        self.time_records = []
+    
+    def update(self):
+        current_time = time.time()
+        self.time_records.append(current_time)
+        self.time_in_seconds += current_time - self._last_time
+        self._last_dt = current_time - self._last_time
+        self._last_time = current_time

@@ -5,6 +5,7 @@ from decisionMaking.DecisionMaking import DecisionMaking
 from control.Control import Control
 from action.Action import Action
 from modeling.Modeling import Modeling
+from utility.Point2d import Point2d
 
 def try_out_complex_action():
     modeling = Modeling()
@@ -15,14 +16,15 @@ def try_out_complex_action():
     # ("craft", ["Torch"])
     # ("equip", "Torch"), but you have to add it to your inventory
     # ("eat", "Berries"), but you have to add it to your inventory
-    # ("run", 0.0) # expected to run bottom right
-    # ("run", -math.pi/4) # expected to run right
-    # ("run", math.pi) # expected to run top left
-    decision_making.secondary_action = ("equip", "Torch")
+    # ("run", 0.0) # expected to run bottom left
+    # ("run", -math.pi/4) # expected to run left
+    # ("run", math.pi/2) # expected to run bottom right
+    # ("go_to", Point2d(6, 6)) # expected to go down
+    decision_making.secondary_action = ("craft", ["Torch"])
     
     # for adding stuff to inventory
-    modeling.player_model.inventory.add_item("Torch", 1)
-    modeling.player_model.inventory.add_item("Torch", 1)
+    # modeling.player_model.inventory.add_item("CutGrass", 2)
+    # modeling.player_model.inventory.add_item("Twigs", 2)
     # modeling.player_model.inventory.add_item("Berries", 1)
 
     time.sleep(2)

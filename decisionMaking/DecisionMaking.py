@@ -1,4 +1,3 @@
-from typing import List
 import math
 
 from decisionMaking.ActionRequester import ActionRequester
@@ -41,7 +40,7 @@ class DecisionMaking:
                 items.append("Grass")
             if "Twigs" in items:
                 items.append("Sapling")
-            obj_lists = world.get_all_of(items)
+            obj_lists = world.get_all_of(items, filter_="only_not_harvested")
             all_objects = []
             for obj_name, obj_list in obj_lists.items():
                 all_objects = [*all_objects, *obj_list]
@@ -60,7 +59,7 @@ class DecisionMaking:
             food_counts = modeling.player_model.inventory.get_inventory_count(foods)
             # if we have no food, look for it
             if np.array(food_counts).sum() == 0:
-                self.primary_action = ("gather", "food")
+                self.primary_action = ("gather", ["food"])
                 self.secondary_system(modeling)
             else:
                 if modeling.player_model.hunger < 15:
@@ -72,7 +71,7 @@ class DecisionMaking:
                 self.secondary_action = ("craft", ["Torch"])
             else:
                 if type(modeling.player_model.inventory.hand.object).__name__ != "Torch":
-                    self.secondary_action = ("equip", "Torch")
+                    self.secondary_action = ("equip", ["Torch"])
         else:
             monsters = [
                 "Treeguard", "KillerBee", "Frog", "Hound", "IceHound", "FireHound", "Spider", "SpiderWarrior",
@@ -94,8 +93,8 @@ class DecisionMaking:
     def inventory_management_system(self, modeling: Modeling):
         pass
 
-    def choose_destination(self, objectives: List[Point2d], player_position: Point2d,
-                           all_objects: List[ObjectModel]) -> None:
+    def choose_destination(self, objectives: list[Point2d], player_position: Point2d,
+                           all_objects: list[ObjectModel]) -> None:
         closest = None
         closest_distance = None
         closest_index = None
@@ -109,7 +108,7 @@ class DecisionMaking:
         else:
             self.secondary_action = ("go_to", closest)
 
-    def decide_what_to_eat(self, foods: List[str], food_counts: List[int], hunger_points_to_fill: float) -> None:
+    def decide_what_to_eat(self, foods: list[str], food_counts: list[int], hunger_points_to_fill: float) -> None:
         # this will definitely be changed later
         best_food_and_count = (None, None)
         for pair in zip(foods, food_counts):
@@ -135,7 +134,7 @@ class DecisionMaking:
         if secondary_action[0] == "run":
             aux_str = f"{secondary_action[1]/math.pi*180}°"
         elif secondary_action[0] == "go_to":
-            aux_str = (secondary_action[1].x, secondary_action[1].y)
+            aux_str = (secondary_action[1].x1, secondary_action[1].x2)
         elif (secondary_action[0] == "eat" or secondary_action[0] == "pick_up_item" 
             or secondary_action[0] == "explore" or secondary_action[0] == "equip" or secondary_action[0] == "craft"
             ):

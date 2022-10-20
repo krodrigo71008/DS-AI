@@ -7,7 +7,7 @@ from classes import get_class_names
 images_dir = "perception/generated_images"
 image_filenames = glob.glob(images_dir + '/**/*.png', recursive=True)
 
-predictions_dir = "perception/yolo_test_results"
+predictions_dir = "perception/yolo_mark_results"
 
 class_names = get_class_names()
 
