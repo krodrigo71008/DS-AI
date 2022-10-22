@@ -2,6 +2,8 @@ import math
 import numpy as np
 
 import pytest
+from modeling.objects.Grass import GRASS_HARVESTED, GRASS_READY, Grass
+from modeling.objects.Sapling import SAPLING_HARVESTED, SAPLING_READY, Sapling
 
 from perception.ImageObject import ImageObject
 from modeling.Modeling import Modeling
@@ -305,6 +307,22 @@ def aux_modeling_object_deletion(test_case):
             elif total_objs_by_chunk_len == 0 and expected:
                 return False
     return True
+
+def test_world_model_filtering():
+    world_model = WorldModel(PlayerModel(Clock()), Clock())
+    sap1 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, lambda x,y,z : None)
+    sap2 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, lambda x,y,z : None)
+    sap3 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, lambda x,y,z : None)
+    sap4 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_HARVESTED, lambda x,y,z : None)
+    world_model.object_lists["Sapling"] = [sap1, sap2, sap3, sap4]
+    gr1 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_READY, lambda x,y,z : None)
+    gr2 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_READY, lambda x,y,z : None)
+    gr3 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_HARVESTED, lambda x,y,z : None)
+    gr4 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_HARVESTED, lambda x,y,z : None)
+    world_model.object_lists["Grass"] = [gr1, gr2, gr3, gr4]
+    results = world_model.get_all_of(["Grass", "Sapling"], "only_not_harvested")
+    assert len(results["Grass"]) == 2
+    assert len(results["Sapling"]) == 3
 
 # start 32
 # im1 = 119 -> 8.6 from left

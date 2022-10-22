@@ -36,7 +36,7 @@ def main(q=None):
         tr.split()
         action.act(control)
         tr.end()
-        time.sleep(0.3)
+        # time.sleep(0.3)
     print("end")
 
 if __name__ == "__main__":

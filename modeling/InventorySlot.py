@@ -28,7 +28,7 @@ class InventorySlot:
             if self.count > self.object.stack_size:
                 self.count = self.object.stack_size
             # For now, I'm always assuming that the new object has 100% spoilage
-            if self.object.spoilage.seconds() is not None:
+            if self.object.spoilage is not None:
                 self.object.spoilage = GameTime(seconds=(self.object.spoilage.seconds() * old_count
                                         + objects_info.get_item_info(info="spoil_time", image_id=self.object.id).seconds()
                                         * (self.count - old_count)) / self.count)

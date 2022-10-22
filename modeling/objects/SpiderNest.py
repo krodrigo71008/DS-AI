@@ -3,8 +3,8 @@ from utility.GameTime import GameTime
 
 
 class SpiderNest(ObjectWithMultipleForms):
-    def __init__(self, position, id_, update_function):
-        super().__init__(False, position, [35], id_, update_function)
+    def __init__(self, position, latest_screen_position, id_, update_function):
+        super().__init__(False, position, latest_screen_position, [35], id_, update_function)
         # I'll add the other states later
 
     def update(self, change):

@@ -14,7 +14,7 @@ class InventoryObject:
         self.time_left = objects_info.get_item_info(info="use_time", obj_id=id_)
 
     def rot(self):
-        if self.spoilage.seconds() is None:
+        if self.spoilage is None:
             raise Exception("Object that doesn't spoil can't rot")
         self.id = objects_info.get_item_info(info="obj_id", name="Rot")
         self.spoilage = GameTime(days=None)

@@ -6,8 +6,8 @@ GRASS_HARVESTED = 22
 
 
 class Grass(ObjectWithMultipleForms):
-    def __init__(self, position, id_, update_function):
-        super().__init__(False, position, [GRASS_READY, GRASS_HARVESTED], id_, update_function)
+    def __init__(self, position, latest_screen_position, id_, update_function):
+        super().__init__(False, position, latest_screen_position, [GRASS_READY, GRASS_HARVESTED], id_, update_function)
         if id_ == GRASS_HARVESTED:
             self.update_function("grow", GameTime(non_winter_days=3), self)
 
@@ -27,9 +27,8 @@ class Grass(ObjectWithMultipleForms):
             self.set_state(GRASS_HARVESTED)
 
     def harvest(self):
-        if self._state == GRASS_HARVESTED:
-            raise Exception("Cannot harvest: already harvested!")
-        self.handle_object_detected(GRASS_HARVESTED)
+        self._state = GRASS_HARVESTED
+        self.update_function("grow", GameTime(non_winter_days=3), self)
 
     def is_harvested(self) -> bool:
         return self._state == GRASS_HARVESTED

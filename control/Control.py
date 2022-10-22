@@ -2,13 +2,14 @@ import math
 from random import randint
 from math import sqrt, pi
 
-from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, PICK_UP_DURATION, RUN_DURATION
+from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, CRAFT_KEYPRESS_DURATION
+from control.constants import PICK_UP_DURATION, PICK_UP_STOP_DURATION, PICK_UP_HOVER_DURATION, RUN_DURATION, FINISH_CRAFTING_DURATION
 from decisionMaking.DecisionMaking import DecisionMaking
-from decisionMaking.constants import PICK_UP_DISTANCE
+from decisionMaking.constants import PICK_UP_DISTANCE, CLOSE_ENOUGH_DISTANCE
 from modeling.Modeling import Modeling
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
-from modeling.constants import CAMERA_HEADING
+from modeling.constants import CAMERA_HEADING, PLAYER_BASE_SPEED
 from utility.Point2d import Point2d
 from utility.Clock import Clock
 from utility.utility import clamp2pi
@@ -43,6 +44,7 @@ class Control:
         self.action_on_cooldown = True
         self.debug = debug
         self.just_finished_action = False
+        self.pick_up_state : str = None
         if self.debug:
             self.records = []
             self.queue = queue
@@ -57,6 +59,7 @@ class Control:
             if not self.continue_action(modeling):
                 should_continue = False
         if should_continue:
+            self.action_aux = None
             self.just_finished_action = False
             if secondary_action[0] == "eat":
                 # this is a one step action
@@ -78,6 +81,13 @@ class Control:
                 self.current_action = secondary_action[0]
                 self.action_in_progress = True
                 self.start_time = self.clock.time()
+            elif secondary_action[0] == "go_precisely_to":
+                # this is a multiple step process
+                # one step is walking for a bit
+                self.go_precisely_towards(secondary_action[1], modeling)
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
             elif secondary_action[0] == "run":
                 # this is a multiple step process
                 # one step is walking for a bit
@@ -93,8 +103,9 @@ class Control:
                 self.action_in_progress = True
                 self.start_time = self.clock.time()
             elif secondary_action[0] == "pick_up_item":
-                # this is a one step process
-                self.pick_up(secondary_action[1])
+                # this is a multiple step process
+                # steps are: waiting, hovering, clicking
+                self.pick_up(secondary_action[1], modeling)
                 self.current_action = secondary_action[0]
                 self.action_in_progress = True
                 self.start_time = self.clock.time()
@@ -105,8 +116,9 @@ class Control:
                 self.action_in_progress = True
                 self.start_time = self.clock.time()
         if self.debug:
-            self.records.append((self.key_action, self.mouse_action, self.action_on_cooldown))
+            self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, self.current_action, self.pick_up_state))
             if self.queue is not None:
+                self.queue.put(("current_action", self.current_action))
                 self.queue.put(("key_action", self.key_action))
                 self.queue.put(("mouse_action", self.mouse_action))
 
@@ -123,9 +135,16 @@ class Control:
                 self.action_in_progress = False
         elif self.current_action == "craft":
             self.action_on_cooldown = True
-            if self.clock.time() - self.start_time >= KEYPRESS_DURATION:
-                self.action_in_progress = False
+            if self.update_at_end is not None and self.update_at_end[0] == "craft":
+                if self.clock.time() - self.start_time >= FINISH_CRAFTING_DURATION:
+                    self.action_in_progress = False
+            else:
+                if self.clock.time() - self.start_time >= CRAFT_KEYPRESS_DURATION:
+                    self.action_in_progress = False
         elif self.current_action == "go_to":
+            if self.clock.time() - self.start_time >= RUN_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "go_precisely_to":
             if self.clock.time() - self.start_time >= RUN_DURATION:
                 self.action_in_progress = False
         elif self.current_action == "run":
@@ -135,8 +154,20 @@ class Control:
             if self.clock.time() - self.start_time >= KEYPRESS_DURATION:
                 self.action_in_progress = False
         elif self.current_action == "pick_up_item":
-            if self.clock.time() - self.start_time >= PICK_UP_DURATION:
-                self.action_in_progress = False
+            # in this case, we're waiting a bit before hovering
+            if self.pick_up_state is None:
+                if self.clock.time() - self.start_time >= PICK_UP_STOP_DURATION:
+                    self.action_in_progress = False
+            elif self.pick_up_state == "hover":
+                if self.clock.time() - self.start_time >= PICK_UP_HOVER_DURATION:
+                    self.action_in_progress = False
+            elif self.pick_up_state == "click":
+                self.action_on_cooldown = True
+                # in this case, action_aux is the estimated time to get to the object, after which the player will be still
+                if self.clock.time() - self.start_time >= self.action_aux:
+                    modeling.player_model.set_direction(None)
+                if self.clock.time() - self.start_time >= PICK_UP_DURATION:
+                    self.action_in_progress = False
         elif self.current_action == "equip":
             if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
                 self.action_in_progress = False
@@ -167,6 +198,7 @@ class Control:
                 else:
                     modeling.player_model.inventory.add_item(obj_name, 1)
                 return_value = False
+                self.pick_up_state = None
                 self.just_finished_action = True
             elif self.update_at_end[0] == "eat":
                 food_stats = objects_info.get_item_info(info="food_stats", name=self.update_at_end[1])
@@ -183,6 +215,10 @@ class Control:
                 modeling.player_model.inventory.craft(self.update_at_end[1])
                 return_value = False
                 self.just_finished_action = True
+            elif self.update_at_end[0] == "change_pick_up_state":
+                change = self.update_at_end[1]
+                self.pick_up_state = change
+                return_value = True
             elif self.update_at_end[0] == "change_inv_state":
                 change = self.update_at_end[1]
                 if change == "up":
@@ -201,7 +237,7 @@ class Control:
             self.update_at_end = None
             return return_value
         if self.debug:
-            self.records.append((self.key_action, self.mouse_action, self.action_on_cooldown))
+            self.records.append(("continue_path", self.key_action, self.mouse_action, self.action_on_cooldown, self.current_action, self.pick_up_state))
         return False
 
     def eat(self, food_name: str, modeling: Modeling):
@@ -266,8 +302,22 @@ class Control:
 
     def go_towards(self, objective: Point2d, modeling: Modeling):
         player_position = modeling.player_model.position
-        # PICK_UP_DISTANCE
+        # PICK_UP_DISTANCE means that we should click it with mouse
         if objective.distance(player_position) < PICK_UP_DISTANCE:
+            self.key_action = None
+            self.mouse_action = None
+            return
+        # direction_to_move is in radians
+        direction_to_move = (objective - player_position).angle()
+        modeling.player_model.set_direction(round(direction_to_move/(pi/4))*pi/4)
+        keys = self.global_direction_to_key_commands(direction_to_move)
+        self.key_action = (keys, "press")
+        self.mouse_action = None
+        self.update_at_end = ("reset_player_direction",)
+
+    def go_precisely_towards(self, objective: Point2d, modeling: Modeling):
+        player_position = modeling.player_model.position
+        if objective.distance(player_position) < CLOSE_ENOUGH_DISTANCE:
             self.key_action = None
             self.mouse_action = None
             return
@@ -335,7 +385,28 @@ class Control:
                      * (DISTANCE/norm[direction]))
         self.go_towards(objective, modeling)
 
-    def pick_up(self, obj: ObjectModel):
-        self.key_action = (["space"], "press_and_release")
-        self.mouse_action = None
-        self.update_at_end = ("pick_up", obj)
+    def pick_up(self, obj : ObjectModel, modeling : Modeling):
+        self.action_on_cooldown = False
+        if self.pick_up_state is None:
+            self.key_action = None
+            self.mouse_action = None
+            self.update_at_end = ("change_pick_up_state", "hover")
+        elif self.pick_up_state == "hover":
+            bbox = obj.latest_screen_position
+            self.key_action = None
+            self.mouse_action = ("move", Point2d(bbox[0] + bbox[2]//2, bbox[1] + bbox[3]//2))
+            self.update_at_end = ("change_pick_up_state", "click")
+            # send notice that we're hovering over obj
+            modeling.world_model.set_hovering_over(obj)
+        elif self.pick_up_state == "click":
+            bbox = obj.latest_screen_position
+            self.key_action = None
+            self.mouse_action = ("click", Point2d(bbox[0] + bbox[2]//2, bbox[1] + bbox[3]//2))
+            player_pos = modeling.player_model.position
+            distance_to_object : Point2d = obj.position - player_pos
+            modeling.player_model.set_direction(distance_to_object.angle())
+            self.update_at_end = ("pick_up", obj)
+            # this is the estimated time that we'll take to get to obj
+            self.action_aux = distance_to_object.distance(Point2d(0, 0))/PLAYER_BASE_SPEED  
+            # send notice that we're no longer hovering over obj
+            modeling.world_model.set_hovering_over(None)          

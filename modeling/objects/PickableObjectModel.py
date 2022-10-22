@@ -2,8 +2,8 @@ from modeling.objects.ObjectModel import ObjectModel
 
 
 class PickableObjectModel(ObjectModel):
-    def __init__(self, position, id_, name):
-        super().__init__(True, position)
+    def __init__(self, position, latest_screen_position, id_, name):
+        super().__init__(True, position, latest_screen_position)
         self.id = id_
         self.name = name
 

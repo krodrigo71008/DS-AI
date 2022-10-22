@@ -37,4 +37,5 @@ class Modeling:
             self.records.append(copy.deepcopy((self.world_model.object_lists, self.world_model.mob_list, self.player_model)))
             #  self.queue.put(("local_objects", copy.deepcopy(self.world_model.local_objects)))
             self.queue.put(("world_model_objects", copy.deepcopy(self.world_model.object_lists)))
+            self.queue.put(("fov_corners", [self.world_model.c1, self.world_model.c2, self.world_model.c3, self.world_model.c4]))
             self.queue.put(("player", copy.deepcopy(self.world_model.player)))

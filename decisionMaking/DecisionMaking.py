@@ -32,6 +32,11 @@ class DecisionMaking:
     def secondary_system(self, modeling: Modeling):
         if self.primary_action[0] == "gather":
             items = self.primary_action[1].copy()
+            counts = modeling.player_model.inventory.get_inventory_count(["CutGrass", "Twigs"])
+            if "CutGrass" in items and counts[0] >= 4:
+                items.remove("CutGrass")
+            if "Twigs" in items and counts[1] >= 4:
+                items.remove("Twigs")
             world = modeling.world_model
             if "food" in items:
                 items.remove("food")
@@ -106,7 +111,16 @@ class DecisionMaking:
         if closest_distance < PICK_UP_DISTANCE:
             self.secondary_action = ("pick_up_item", all_objects[closest_index])
         else:
-            self.secondary_action = ("go_to", closest)
+            # if we're currently trying to pick up an item, I don't want to revert trying to get close to it unless
+            # we're really far away
+            if self.secondary_action[0] == "pick_up_item":
+                if closest_distance > 1.5*PICK_UP_DISTANCE:
+                    self.secondary_action = ("go_to", closest)
+                else:
+                    if self.secondary_action[1] != all_objects[closest_index]:
+                        self.secondary_action = ("pick_up_item", all_objects[closest_index])
+            else:
+                self.secondary_action = ("go_to", closest)
 
     def decide_what_to_eat(self, foods: list[str], food_counts: list[int], hunger_points_to_fill: float) -> None:
         # this will definitely be changed later
@@ -135,6 +149,8 @@ class DecisionMaking:
             aux_str = f"{secondary_action[1]/math.pi*180}°"
         elif secondary_action[0] == "go_to":
             aux_str = (secondary_action[1].x1, secondary_action[1].x2)
+        elif secondary_action[0] == "pick_up_item":
+            aux_str = (secondary_action[1], secondary_action[1]._state)
         elif (secondary_action[0] == "eat" or secondary_action[0] == "pick_up_item" 
             or secondary_action[0] == "explore" or secondary_action[0] == "equip" or secondary_action[0] == "craft"
             ):

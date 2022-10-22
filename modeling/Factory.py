@@ -20,80 +20,80 @@ class Factory:
 
     # receives image id and returns an object
     @staticmethod
-    def create_object(image_id, pos, update_function=None):
+    def create_object(image_id, pos, latest_screen_position, update_function=None):
         obj_id = objects_info.get_item_info(info="obj_id", image_id=image_id)
         if obj_id == 1:
-            return TallbirdNest(pos)
+            return TallbirdNest(pos, latest_screen_position)
         if obj_id == 2:
-            return TallbirdEgg(pos)
+            return TallbirdEgg(pos, latest_screen_position)
         if obj_id == 3:
-            return Flower(pos)
+            return Flower(pos, latest_screen_position)
         if obj_id == 4:
-            return Grass(pos, image_id, update_function)
+            return Grass(pos, latest_screen_position, image_id, update_function)
         if obj_id == 5:
-            return Sapling(pos, image_id, update_function)
+            return Sapling(pos, latest_screen_position, image_id, update_function)
         if obj_id == 6:
-            return PickableObjectModel(pos, obj_id, "Seeds")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Seeds")
         if obj_id == 7:
-            return PickableObjectModel(pos, obj_id, "Flint")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Flint")
         if obj_id == 8:
-            return PickableObjectModel(pos, obj_id, "MonsterMeat")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "MonsterMeat")
         if obj_id == 9:
-            return PickableObjectModel(pos, obj_id, "HoundTooth")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "HoundTooth")
         if obj_id == 10:
-            return PickableObjectModel(pos, obj_id, "PigSkin")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "PigSkin")
         if obj_id == 11:
-            return Ashes(pos, update_function)
+            return Ashes(pos, latest_screen_position, update_function)
         if obj_id == 12:
-            return TreeEvergreen(pos, image_id, update_function)
+            return TreeEvergreen(pos, latest_screen_position, image_id, update_function)
         if obj_id == 13:
-            return SpiderNest(pos, image_id, update_function)
+            return SpiderNest(pos, latest_screen_position, image_id, update_function)
         if obj_id == 14:
-            return BerryBush(pos, image_id, update_function)
+            return BerryBush(pos, latest_screen_position, image_id, update_function)
         if obj_id == 15:
-            return PickableObjectModel(pos, obj_id, "Honey")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Honey")
         if obj_id == 16:
-            return PickableObjectModel(pos, obj_id, "Stinger")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Stinger")
         if obj_id == 17:
-            return PickableObjectModel(pos, obj_id, "FrogLegs")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "FrogLegs")
         if obj_id == 18:
-            return PickableObjectModel(pos, obj_id, "Blueprint")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Blueprint")
         if obj_id == 19:
-            return PickableObjectModel(pos, obj_id, "Silk")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Silk")
         if obj_id == 20:
-            return Rock(pos)
+            return Rock(pos, latest_screen_position)
         if obj_id == 21:
-            return PickableObjectModel(pos, obj_id, "Meat")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Meat")
         if obj_id == 22:
-            return PickableObjectModel(pos, obj_id, "Carrot")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Carrot")
         if obj_id == 23:
-            return Campfire(pos, image_id, update_function)
+            return Campfire(pos, latest_screen_position, image_id, update_function)
         if obj_id == 24:
-            return PickableObjectModel(pos, obj_id, "SpiderGland")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "SpiderGland")
         if obj_id == 25:
-            return PickableObjectModel(pos, obj_id, "Rocks")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Rocks")
         if obj_id == 26:
-            return PickableObjectModel(pos, obj_id, "Axe")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Axe")
         if obj_id == 27:
-            return PickableObjectModel(pos, obj_id, "Pickaxe")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Pickaxe")
         if obj_id == 28:
-            return PickableObjectModel(pos, obj_id, "Shovel")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Shovel")
         if obj_id == 29:
-            return PickableObjectModel(pos, obj_id, "Hammer")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Hammer")
         if obj_id == 30:
-            return PickableObjectModel(pos, obj_id, "Razor")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Razor")
         if obj_id == 31:
-            return PickableObjectModel(pos, obj_id, "Torch")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Torch")
         if obj_id == 32:
-            return PickableObjectModel(pos, obj_id, "CutGrass")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "CutGrass")
         if obj_id == 33:
-            return PickableObjectModel(pos, obj_id, "Twigs")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Twigs")
         if obj_id == 34:
-            return PickableObjectModel(pos, obj_id, "Rot")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Rot")
         if obj_id == 35:
-            return PickableObjectModel(pos, obj_id, "RottenEgg")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "RottenEgg")
         if obj_id == 36:
-            return PickableObjectModel(pos, obj_id, "Berries")
+            return PickableObjectModel(pos, latest_screen_position, obj_id, "Berries")
 
     @staticmethod
     def create_mob(id_, pos):

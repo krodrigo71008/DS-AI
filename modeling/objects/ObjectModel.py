@@ -3,9 +3,10 @@ from utility.Point2d import Point2d
 
 
 class ObjectModel:
-    def __init__(self, pickable, position):
+    def __init__(self, pickable, position, latest_screen_position):
         self.pickable = pickable
         self.position = position
+        self.latest_screen_position = latest_screen_position
         self.cycles_to_be_deleted = CYCLES_FOR_OBJECT_REMOVAL
 
     def set_position(self, x, z):

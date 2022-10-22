@@ -58,6 +58,7 @@ class WorldModel:
         self.avg_observed_error : Point2d = None
         self.recent_objects : list[list[ObjectModel, int]] = []
         self.additions_to_recent_objects : list[list[ObjectModel, int]] = []
+        self.hovering_object : ObjectModel = None
 
     def point_to_chunk_index(self, p : Point2d) -> tuple[int, int]:
         return (math.floor(p.x1/CHUNK_SIZE), math.floor(p.x2/CHUNK_SIZE))
@@ -265,12 +266,13 @@ class WorldModel:
         if best_match is None:
             # in this case, I just identified something that's not in the WorldModel yet, so I create a new object
             # the second parameter (creation_time) is used as tiebreaker in case two updates are scheduled at the same time
-            obj = factory.create_object(image_obj.id, pos,
+            obj = factory.create_object(image_obj.id, pos, image_obj.box,
                                         lambda change, time_delta, instance:
                                         self.schedule_update(pos, time.time(), change, time_delta, instance))
 
             self.additions_to_recent_objects.append([obj, 1])
         else:
+            best_match.latest_screen_position = image_obj.box
             # in this case, I identified an object that's already in my WorldModel or in the recent objects list
             if best_match in [pair[0] for pair in self.detected_this_cycle]:
                 obj_index = [pair[0] for pair in self.detected_this_cycle].index(best_match)
@@ -350,16 +352,18 @@ class WorldModel:
                                                     self.c2_deletion_border,
                                                     self.c3_deletion_border, 
                                                     self.c4_deletion_border], obj.position):
-                        obj.cycles_to_be_deleted -= 1
-                        if obj.cycles_to_be_deleted == 0:
-                            obj_name = type(obj).__name__
-                            obj_list = self.object_lists[obj_name]
-                            obj_index = obj_list.index(obj)
-                            del obj_list[obj_index]
-                            chunk_index = self.point_to_chunk_index(obj.position)
-                            chunk_obj_list = self.objects_by_chunks[chunk_index]
-                            obj_index_in_chunk_list = chunk_obj_list.index(obj)
-                            del chunk_obj_list[obj_index_in_chunk_list]
+                        # we shouldn't count down an object for deletion if we're hovering over it
+                        if obj != self.hovering_object:
+                            obj.cycles_to_be_deleted -= 1
+                            if obj.cycles_to_be_deleted == 0:
+                                obj_name = type(obj).__name__
+                                obj_list = self.object_lists[obj_name]
+                                obj_index = obj_list.index(obj)
+                                del obj_list[obj_index]
+                                chunk_index = self.point_to_chunk_index(obj.position)
+                                chunk_obj_list = self.objects_by_chunks[chunk_index]
+                                obj_index_in_chunk_list = chunk_obj_list.index(obj)
+                                del chunk_obj_list[obj_index_in_chunk_list]
 
         # adding new recent objects 
         self.recent_objects.extend(self.additions_to_recent_objects)
@@ -391,6 +395,9 @@ class WorldModel:
         chunk_3 = self.point_to_chunk_index(Point2d(max_x1, max_x2))
         chunk_4 = self.point_to_chunk_index(Point2d(min_x1, max_x2))
         return [chunk_1, chunk_2, chunk_3, chunk_4]
+
+    def set_hovering_over(self, obj : ObjectModel):
+        self.hovering_object = obj
 
     # returns dict of objects
     def get_all_of(self, obj_list : list[str], filter_ : str = None) -> dict:

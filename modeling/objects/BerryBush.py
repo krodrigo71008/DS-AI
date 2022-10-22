@@ -6,8 +6,8 @@ BERRYBUSH_HARVESTED = 36
 
 
 class BerryBush(ObjectWithMultipleForms):
-    def __init__(self, position, id_, update_function):
-        super().__init__(False, position, [BERRYBUSH_READY, BERRYBUSH_HARVESTED], id_, update_function)
+    def __init__(self, position, latest_screen_position, id_, update_function):
+        super().__init__(False, position, latest_screen_position, [BERRYBUSH_READY, BERRYBUSH_HARVESTED], id_, update_function)
         if id_ == BERRYBUSH_HARVESTED:
             self.update_function("grow", GameTime(non_winter_days=4.6875), self)
 
@@ -27,9 +27,8 @@ class BerryBush(ObjectWithMultipleForms):
             self.set_state(BERRYBUSH_HARVESTED)
 
     def harvest(self):
-        if self._state == BERRYBUSH_HARVESTED:
-            raise Exception("Cannot harvest: already harvested!")
-        self.handle_object_detected(BERRYBUSH_HARVESTED)
+        self._state = BERRYBUSH_HARVESTED
+        self.update_function("grow", GameTime(non_winter_days=4.6875), self)
 
     def is_harvested(self) -> bool:
         return self._state == BERRYBUSH_HARVESTED

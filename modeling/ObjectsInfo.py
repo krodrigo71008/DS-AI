@@ -139,7 +139,7 @@ class ObjectsInfo:
         }
         # this is for items that degrade with time (like torch, lantern), use time in seconds
         self._name_to_use_time = {
-            "Torch": 75
+            "Torch": GameTime(seconds=75)
         }
         # this is for equippable items
         self._name_to_equippable_slot = {

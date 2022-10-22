@@ -14,7 +14,7 @@ from utility.Clock import ClockMock
 
 
 def try_out_modeling_with_recorded_inputs():
-    LIMIT_IMAGES = 50
+    LIMIT_IMAGES = 5000
     route_start = 0
     with open(f"records/time_records_{route_start}.pkl", 'rb') as file:
         time_records = pickle.load(file)

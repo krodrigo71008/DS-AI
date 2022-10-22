@@ -7,6 +7,7 @@ from control.Control import Control
 class Action:
     def __init__(self):
         self.current_keys = set()
+        self.records = []
 
     def act(self, control: Control):
         # key_action is array of strings
@@ -17,21 +18,32 @@ class Action:
                 keys_to_release = list(self.current_keys.difference(key_action[0]))
                 if len(keys_to_release) > 0:
                     keyboard.release('+'.join(keys_to_release))
+                    self.records.append(('release', '+'.join(keys_to_release)))
                 keyboard.press('+'.join(key_action[0]))
+                self.records.append(('´press', '+'.join(key_action[0])))
                 self.current_keys = set(key_action[0])
             elif key_action[1] == "press_and_release":
+                # this is probably wrong, but for now just release all keys when doing it
                 if not control.action_on_cooldown:
+                    if len(self.current_keys) > 0:
+                        keyboard.release('+'.join(self.current_keys))
+                        self.current_keys = set()
                     keyboard.press_and_release('+'.join(key_action[0]))
+                    self.records.append(('press_and_release', '+'.join(key_action[0])))
                     self.current_keys = self.current_keys.difference(key_action[0])
         else:
-            keyboard.release('+'.join(self.current_keys))
+            if len(self.current_keys) > 0:
+                keyboard.release('+'.join(self.current_keys))
         if mouse_action is not None:
-            if mouse_action[0] == "click":
-                mouse.move(mouse_action[1].x1, mouse_action[1].x2)
-                mouse.click()
-            elif mouse_action[0] == "right_click":
-                mouse.move(mouse_action[1].x1, mouse_action[1].x2)
-                mouse.right_click()
+            if not control.action_on_cooldown:
+                if mouse_action[0] == "click":
+                    mouse.move(mouse_action[1].x1, mouse_action[1].x2)
+                    mouse.click()
+                elif mouse_action[0] == "right_click":
+                    mouse.move(mouse_action[1].x1, mouse_action[1].x2)
+                    mouse.right_click()
+                elif mouse_action[0] == "move":
+                    mouse.move(mouse_action[1].x1, mouse_action[1].x2)
 
     def act_mock(self, control: Control) -> list[str]:
         """Same as act, but doesn't actually perform the action and also returns keys_to_release
