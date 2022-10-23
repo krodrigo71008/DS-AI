@@ -14,7 +14,7 @@ predictions_dir = 'perception/predictions'
 
 perception = Perception()
 
-NUM_IMAGES = 106
+NUM_IMAGES = 107
 
 
 if not os.path.exists(text_logs_dir):

@@ -41,7 +41,7 @@ class Control:
         self.start_time = None
         self.update_at_end = None
         self.current_action = None
-        self.action_on_cooldown = True
+        self.action_on_cooldown = False
         self.debug = debug
         self.just_finished_action = False
         self.pick_up_state : str = None
@@ -59,62 +59,72 @@ class Control:
             if not self.continue_action(modeling):
                 should_continue = False
         if should_continue:
+            self.action_on_cooldown = False
             self.action_aux = None
             self.just_finished_action = False
-            if secondary_action[0] == "eat":
-                # this is a one step action
-                self.eat(secondary_action[1], modeling)
-                self.current_action = secondary_action[0]
+            # if the crafting tab is open and we don't want to craft anything right now, we should close it before anything else
+            if secondary_action[0] != "craft" and self.crafting_open:
+                self.key_action = (["caps_lock"], "press_and_release")
+                self.mouse_action = None
+                self.current_action = "close_inventory"
+                self.crafting_open = False
                 self.action_in_progress = True
                 self.start_time = self.clock.time()
-            elif secondary_action[0] == "craft":
-                # this is a multiple step action
-                # one step is one key press
-                self.craft(secondary_action[1])
-                self.current_action = secondary_action[0]
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
-            elif secondary_action[0] == "go_to":
-                # this is a multiple step process
-                # one step is walking for a bit
-                self.go_towards(secondary_action[1], modeling)
-                self.current_action = secondary_action[0]
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
-            elif secondary_action[0] == "go_precisely_to":
-                # this is a multiple step process
-                # one step is walking for a bit
-                self.go_precisely_towards(secondary_action[1], modeling)
-                self.current_action = secondary_action[0]
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
-            elif secondary_action[0] == "run":
-                # this is a multiple step process
-                # one step is walking for a bit
-                self.run(secondary_action[1])
-                self.current_action = secondary_action[0]
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
-            elif secondary_action[0] == "explore":
-                # this is a multiple step process
-                # one step is walking for a bit
-                self.explore(modeling)
-                self.current_action = secondary_action[0]
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
-            elif secondary_action[0] == "pick_up_item":
-                # this is a multiple step process
-                # steps are: waiting, hovering, clicking
-                self.pick_up(secondary_action[1], modeling)
-                self.current_action = secondary_action[0]
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
-            elif secondary_action[0] == "equip":
-                # this is a one step process
-                self.equip(secondary_action[1], modeling)
-                self.current_action = secondary_action[0]
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
+            else:
+                if secondary_action[0] == "eat":
+                    # this is a one step action
+                    self.eat(secondary_action[1], modeling)
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
+                elif secondary_action[0] == "craft":
+                    # this is a multiple step action
+                    # one step is one key press
+                    self.craft(secondary_action[1])
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
+                elif secondary_action[0] == "go_to":
+                    # this is a multiple step process
+                    # one step is walking for a bit
+                    self.go_towards(secondary_action[1], modeling)
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
+                elif secondary_action[0] == "go_precisely_to":
+                    # this is a multiple step process
+                    # one step is walking for a bit
+                    self.go_precisely_towards(secondary_action[1], modeling)
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
+                elif secondary_action[0] == "run":
+                    # this is a multiple step process
+                    # one step is walking for a bit
+                    self.run(secondary_action[1])
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
+                elif secondary_action[0] == "explore":
+                    # this is a multiple step process
+                    # one step is walking for a bit
+                    self.explore(modeling)
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
+                elif secondary_action[0] == "pick_up_item":
+                    # this is a multiple step process
+                    # steps are: waiting, hovering, clicking
+                    self.pick_up(secondary_action[1], modeling)
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
+                elif secondary_action[0] == "equip":
+                    # this is a one step process
+                    self.equip(secondary_action[1], modeling)
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
         if self.debug:
             self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, self.current_action, self.pick_up_state))
             if self.queue is not None:
@@ -170,6 +180,10 @@ class Control:
                     self.action_in_progress = False
         elif self.current_action == "equip":
             if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "close_inventory":
+            self.action_on_cooldown = True
+            if self.clock.time() - self.start_time >= CRAFT_KEYPRESS_DURATION:
                 self.action_in_progress = False
 
         # each action has different signals for stopping, this will probably be changed someday
@@ -269,7 +283,6 @@ class Control:
                 return
 
     def craft(self, things_to_craft: list[str]):
-        self.action_on_cooldown = False
         if not self.crafting_open:
             self.key_action = (["caps_lock"], "press_and_release")
             self.crafting_open = True
@@ -386,7 +399,6 @@ class Control:
         self.go_towards(objective, modeling)
 
     def pick_up(self, obj : ObjectModel, modeling : Modeling):
-        self.action_on_cooldown = False
         if self.pick_up_state is None:
             self.key_action = None
             self.mouse_action = None

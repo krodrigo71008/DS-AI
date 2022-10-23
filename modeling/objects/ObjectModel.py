@@ -9,6 +9,9 @@ class ObjectModel:
         self.latest_screen_position = latest_screen_position
         self.cycles_to_be_deleted = CYCLES_FOR_OBJECT_REMOVAL
 
+    def __str__(self) -> str:
+        return f"{type(self).__name__} at {self.position}"
+
     def set_position(self, x, z):
         self.position = Point2d(x, z)
 

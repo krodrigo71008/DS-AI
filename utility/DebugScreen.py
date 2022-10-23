@@ -60,7 +60,10 @@ class DebugScreen:
             elif info[0] == "key_action":
                 self.key_label["text"] = "Key command: " + str(info[1])
             elif info[0] == "mouse_action":
-                self.mouse_label["text"] = "Mouse command: " + str(info[1])
+                if info[1] is None:
+                    self.mouse_label["text"] = "Mouse command: " + str(info[1])
+                else:
+                    self.mouse_label["text"] = f"Mouse command: {str(info[1][0])}, {str(info[1][1])}"
             elif info[0] == "current_action":
                 self.current_action_label["text"] = "Current action: " + str(info[1])
             # elif info[0] == "local_objects":

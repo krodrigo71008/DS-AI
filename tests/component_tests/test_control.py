@@ -22,12 +22,12 @@ def try_out_complex_action():
     # ("run", math.pi/2) # expected to run bottom right
     # ("go_to", Point2d(6, 6)) # expected to go down
     # grass = Grass(Point2d(4, 0), (500, 500, 200, 200), GRASS_READY, None)
-    decision_making.secondary_action = ("craft", ["Torch"])
+    decision_making.secondary_action = ("eat", "Berries")
     
     # for adding stuff to inventory
-    modeling.player_model.inventory.add_item("CutGrass", 2)
-    modeling.player_model.inventory.add_item("Twigs", 2)
-    # modeling.player_model.inventory.add_item("Berries", 1)
+    # modeling.player_model.inventory.add_item("CutGrass", 2)
+    # modeling.player_model.inventory.add_item("Twigs", 2)
+    modeling.player_model.inventory.add_item("Berries", 1)
 
     time.sleep(2)
     start = time.time()
