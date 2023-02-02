@@ -240,11 +240,15 @@ class DSBehaviorTree(BehaviorTree):
         self.root = SelectorNode("Select1")
         self.root.add_child(SequenceNode("Sequence1"))
         self.root.add_child(SequenceNode("Sequence2"))
+        self.root.add_child(SequenceNode("Sequence3"))
         self.root.add_child(GatherFood())
-        self.root.children[0].add_child(NegateNode(CheckEnoughGrassTwigs()))
-        self.root.children[0].add_child(GatherGrassTwigs())
-        self.root.children[1].add_child(NegateNode(CheckTorch()))
-        self.root.children[1].add_child(CraftTorch())
+        self.root.children[0].add_child(CheckTorchEquipped())
+        self.root.children[0].add_child(IsDayTime())
+        self.root.children[0].add_child(UnequipTorch())
+        self.root.children[1].add_child(NegateNode(CheckEnoughGrassTwigs()))
+        self.root.children[1].add_child(GatherGrassTwigs())
+        self.root.children[2].add_child(NegateNode(CheckTorch()))
+        self.root.children[2].add_child(CraftTorch())
 
 
 class CheckEnoughGrassTwigs(LeafNode):
@@ -314,6 +318,52 @@ class CraftTorch(LeafNode):
         if torch_count < 1:
             return ExecutionStatus.RUNNING
         elif modeling.clock.time() - self.start_time >= 60:
+            return ExecutionStatus.FAILURE
+        else:
+            return ExecutionStatus.SUCCESS
+
+
+class CheckTorchEquipped(LeafNode):
+    def __init__(self):
+        super().__init__("CheckTorchEquipped")
+
+    def enter(self, modeling, action_requester):
+        pass
+
+    def execute(self, modeling, action_requester):
+        hand_slot = modeling.player_model.inventory.get_inventory_slots()["Hand"]
+        if hand_slot.object is not None and hand_slot.object.name == "Torch":
+            return ExecutionStatus.SUCCESS
+        else:
+            return ExecutionStatus.FAILURE
+
+
+class IsDayTime(LeafNode):
+    def __init__(self):
+        super().__init__("IsDayTime")
+
+    def enter(self, modeling, action_requester):
+        pass
+
+    def execute(self, modeling, action_requester):
+        if modeling.clock.day_section() != "Night":
+            return ExecutionStatus.SUCCESS
+        else:
+            return ExecutionStatus.FAILURE
+
+
+class UnequipTorch(LeafNode):
+    def __init__(self):
+        super().__init__("UnequipTorch")
+        self.start_time = None
+
+    def enter(self, modeling, action_requester):
+        self.start_time = modeling.clock.time()
+        # set the behavior
+        action_requester.set_action(("unequip", "Hand"))
+
+    def execute(self, modeling, action_requester):
+        if modeling.clock.time() - self.start_time >= 60:
             return ExecutionStatus.FAILURE
         else:
             return ExecutionStatus.SUCCESS

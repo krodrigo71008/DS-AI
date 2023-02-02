@@ -2,7 +2,7 @@ import math
 from random import randint
 from math import sqrt, pi
 
-from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, CRAFT_KEYPRESS_DURATION
+from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, HAND_INVENTORY_POSITION, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, CRAFT_KEYPRESS_DURATION
 from control.constants import PICK_UP_DURATION, PICK_UP_STOP_DURATION, PICK_UP_HOVER_DURATION, RUN_DURATION, FINISH_CRAFTING_DURATION
 from decisionMaking.DecisionMaking import DecisionMaking
 from decisionMaking.constants import PICK_UP_DISTANCE, CLOSE_ENOUGH_DISTANCE
@@ -125,6 +125,12 @@ class Control:
                     self.current_action = secondary_action[0]
                     self.action_in_progress = True
                     self.start_time = self.clock.time()
+                elif secondary_action[0] == "unequip":
+                    # this is a one step process
+                    self.unequip(secondary_action[1])
+                    self.current_action = secondary_action[0]
+                    self.action_in_progress = True
+                    self.start_time = self.clock.time()
         if self.debug:
             self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, self.current_action, self.pick_up_state))
             if self.queue is not None:
@@ -181,6 +187,9 @@ class Control:
         elif self.current_action == "equip":
             if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
                 self.action_in_progress = False
+        elif self.current_action == "unequip":
+            if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
+                self.action_in_progress = False
         elif self.current_action == "close_inventory":
             self.action_on_cooldown = True
             if self.clock.time() - self.start_time >= CRAFT_KEYPRESS_DURATION:
@@ -201,7 +210,7 @@ class Control:
             if self.update_at_end[0] == "pick_up":
                 obj_name = type(self.update_at_end[1]).__name__
                 if obj_name == "BerryBush":
-                    modeling.player_model.inventory.add_item("Berry", 1)
+                    modeling.player_model.inventory.add_item("Berries", 1)
                     self.update_at_end[1].harvest()
                 elif obj_name == "Grass":
                     modeling.player_model.inventory.add_item("CutGrass", 1)
@@ -223,6 +232,10 @@ class Control:
                 self.just_finished_action = True
             elif self.update_at_end[0] == "equip":
                 modeling.player_model.inventory.equip_item(self.update_at_end[1])
+                return_value = False
+                self.just_finished_action = True
+            elif self.update_at_end[0] == "unequip":
+                modeling.player_model.inventory.unequip_slot(self.update_at_end[1])
                 return_value = False
                 self.just_finished_action = True
             elif self.update_at_end[0] == "craft":
@@ -270,17 +283,29 @@ class Control:
 
     def equip(self, equip_name: str, modeling: Modeling):
         inv = modeling.player_model.inventory
-        slots_1 = [slot_num for slot_num in inv.slots]
-        slots_2 = [slot.object.name if slot.object is not None else None for slot in inv.slots.values()]
+        slots_1 = [slot_name for slot_name in inv.get_inventory_slots()]
+        slots_2 = [slot.object.name if slot.object is not None else None for slot in inv.get_inventory_slots().values()]
         for elem in zip(slots_1, slots_2):
             # elem is (slot_number, slot_object_name)
-            if elem[1] == equip_name:
+            if elem[1] == equip_name and type(elem[0]) == int:
                 INV_SLOT_1_POS = Point2d(FIRST_INVENTORY_POSITION[0], FIRST_INVENTORY_POSITION[1])
                 INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
                 self.mouse_action = ("right_click", INV_SLOT_1_POS+INV_SLOT_DELTA*elem[0])
                 self.key_action = None
                 self.update_at_end = ("equip", equip_name)
                 return
+
+    def unequip(self, equip_slot: str):
+        slot_name_to_number = {
+            "Hand": 0,
+            "Body": 1,
+            "Head": 2,
+        }
+        INV_SLOT_HAND_POS = Point2d(HAND_INVENTORY_POSITION[0], HAND_INVENTORY_POSITION[1])
+        INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
+        self.mouse_action = ("right_click", INV_SLOT_HAND_POS+INV_SLOT_DELTA*slot_name_to_number[equip_slot])
+        self.key_action = None
+        self.update_at_end = ("unequip", equip_slot)
 
     def craft(self, things_to_craft: list[str]):
         if not self.crafting_open:

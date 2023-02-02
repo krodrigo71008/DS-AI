@@ -56,6 +56,8 @@ class DecisionMaking:
                 self.choose_destination(locations, modeling.world_model.player.position, all_objects)
         elif self.primary_action[0] == "craft":
             self.secondary_action = ("craft", self.primary_action[1])
+        elif self.primary_action[0] == "unequip":
+            self.secondary_action = ("unequip", "Hand")
 
     # takes control when needed
     def emergency_system(self, modeling: Modeling):
@@ -72,6 +74,7 @@ class DecisionMaking:
                     self.decide_what_to_eat(foods, food_counts, hunger_points_to_fill)
         elif modeling.clock.day_section() == "Night":
             torch_count = modeling.player_model.inventory.get_inventory_count(["Torch"])
+            # this will fail if we don't have materials to craft it, but we should have enough
             if np.array(torch_count).sum() == 0:
                 self.secondary_action = ("craft", ["Torch"])
             else:

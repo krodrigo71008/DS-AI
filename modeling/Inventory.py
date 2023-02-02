@@ -25,15 +25,14 @@ class Inventory:
             12: InventorySlot(12),
             13: InventorySlot(13),
             14: InventorySlot(14),
+            "Head": InventorySlot("Head"),
+            "Body": InventorySlot("Body"),
+            "Hand": InventorySlot("Hand"),
         }
-        self.head = InventorySlot("Head")
         # the return_to attributes identify to where the currently equipped object should go when unequipped
         self.head_return_to : InventorySlot = None
-        self.body = InventorySlot("Body")
         self.body_return_to : InventorySlot = None
-        self.hand = InventorySlot("Hand")
         self.hand_return_to : InventorySlot = None
-        self.equipment_slots = [self.head, self.body, self.hand]
         self._list_of_changes = []
 
     def get_inventory_count(self, object_names: List[str]) -> List[int]:
@@ -45,14 +44,7 @@ class Inventory:
         :rtype: List[int]
         """
         inv = {}
-        for key, value in self.slots.items():
-            if value.object is not None:
-                if value.object.name in inv:
-                    inv[value.object.name] += value.count
-                else:
-                    inv[value.object.name] = value.count
-
-        for slot in [self.head, self.body, self.hand]:
+        for slot in self.slots.values():
             if slot.object is not None:
                 if slot.object.name in inv:
                     inv[slot.object.name] += slot.count
@@ -92,15 +84,8 @@ class Inventory:
         return None
 
     # Head, Body, Hand or a number in the range 0-14
-    def _get_slot(self, slot_descriptor : str) -> InventorySlot:
-        if slot_descriptor == "Head":
-            return self.head
-        elif slot_descriptor == "Body":
-            return self.body
-        elif slot_descriptor == "Hand":
-            return self.hand
-        else:
-            return self.slots[slot_descriptor]
+    def _get_slot(self, slot_descriptor : str | int) -> InventorySlot:
+        return self.slots[slot_descriptor]
 
     # as in picking up an item, returns false if item doesn't fit (there's
     # something on cursor after picking it up)
@@ -110,16 +95,16 @@ class Inventory:
             if count != 1:
                 raise Exception("Incorrect usage, equippable items can't be stacked")
             if equip_slot == "Head":
-                if self.head.object is None:
-                    self.head.add_item(objects_info.get_item_info(info="obj_id", name=name), count)
+                if self.slots["Head"].object is None:
+                    self.slots["Head"].add_item(objects_info.get_item_info(info="obj_id", name=name), count)
                     return True
             elif equip_slot == "Body":
-                if self.body.object is None:
-                    self.body.add_item(objects_info.get_item_info(info="obj_id", name=name), count)
+                if self.slots["Body"].object is None:
+                    self.slots["Body"].add_item(objects_info.get_item_info(info="obj_id", name=name), count)
                     return True
             else:
-                if self.hand.object is None:
-                    self.hand.add_item(objects_info.get_item_info(info="obj_id", name=name), count)
+                if self.slots["Hand"].object is None:
+                    self.slots["Hand"].add_item(objects_info.get_item_info(info="obj_id", name=name), count)
                     return True
         first_non_full_slot = self._find_first_non_full_slot(name)
         if first_non_full_slot is None:
@@ -133,19 +118,17 @@ class Inventory:
                 return True
         else:
             # add item to existing stack and possibly fill new slot
-            if (self.slots[first_non_full_slot].count + count <=
-                    objects_info.get_item_info(info="stack_size", name=name)):
-                self.slots[first_non_full_slot].add_item(
-                    objects_info.get_item_info(info="obj_id", name=name), count)
-                return True
+            extra_count = self.slots[first_non_full_slot].count + count - objects_info.get_item_info(info="stack_size", name=name)
             self.slots[first_non_full_slot].add_item(
                 objects_info.get_item_info(info="obj_id", name=name), count)
+            if extra_count <= 0:
+                return True
             first_empty_slot = self._find_first_empty_slot()
             if first_empty_slot is None:
                 return False
             else:
                 self.slots[first_empty_slot].add_item(
-                    objects_info.get_item_info(info="obj_id", name=name), count)
+                    objects_info.get_item_info(info="obj_id", name=name), extra_count)
                 return True
 
     # just checking if it is possible to add an item
@@ -241,11 +224,32 @@ class Inventory:
         self.revert_simulation()
         return self.can_add_item(name, 1)
 
-    # something like dropping something on the ground, does not mean "is the slot empty?"
+    # like dropping something on the ground
     # slot should be a number from 0 to 14, "Head", "Body" or "Hand"
-    def empty_slot(self, slot_name):
+    def drop_slot(self, slot_name):
         slot = self._get_slot(slot_name)
         slot.reset()
+
+    def unequip_slot(self, slot_name):
+        if slot_name == "Head":
+            # if there is no previous slot or
+            # if the slot the item should return to is occupied, we choose the first free slot
+            if self.head_return_to is None or self.head_return_to.get_slot_info()[0] is not None:
+                self.head_return_to = self.slots[self._find_first_empty_slot()]
+            self.head_return_to.trade_slot(self.slots["Head"])
+        elif slot_name == "Body":
+            # if there is no previous slot or
+            # if the slot the item should return to is occupied, we choose the first free slot
+            if self.body_return_to is None or self.body_return_to.get_slot_info()[0] is not None:
+                self.body_return_to = self.slots[self._find_first_empty_slot()]
+            self.body_return_to.trade_slot(self.slots["Body"])
+        elif slot_name == "Hand":
+            # if there is no previous slot or
+            # if the slot the item should return to is occupied, we choose the first free slot
+            if self.hand_return_to is None or self.hand_return_to.get_slot_info()[0] is not None:
+                self.hand_return_to = self.slots[self._find_first_empty_slot()]
+            self.hand_return_to.trade_slot(self.slots["Hand"])
+        
 
     # trading one slot with another
     # slot should be a number from 0 to 14, "head", "body" or "hand"
@@ -286,56 +290,55 @@ class Inventory:
         if item_slot is None:
             raise Exception("Can't equip item that's not in the inventory")
         item_slot = self.slots[item_slot]
-        equip_slot = self._get_slot(objects_info.get_item_info(info="equip_slot", name=name))
-        # prev_equip is the
+        slot_name = objects_info.get_item_info(info="equip_slot", name=name)
+        equip_slot = self._get_slot(slot_name)
+        # prev_equip is the equipment previously equipped
         prev_equip = equip_slot.get_slot_info()
         if prev_equip is None:
-            item_slot.trade_slot(equip_slot)
+            self.trade_with_equip_slot(item_slot, equip_slot)
         else:
             obj, count = item_slot.get_slot_info()
             item_slot.reset()
-            if equip_slot.position == "Head":
-                # if there is no previous slot or
-                # if the slot the item should return to is occupied, we choose the first free slot
-                if self.head_return_to is None or self.head_return_to.get_slot_info() is not None:
-                    self.head_return_to = self.slots[self._find_first_empty_slot()]
-                self.trade_with_equip_slot(self.head_return_to, self.head)
-                self.head.change_item(obj.id, count)
-            if equip_slot.position == "Body":
-                # if there is no previous slot or
-                # if the slot the item should return to is occupied, we choose the first free slot
-                if self.body_return_to is None or self.body_return_to.get_slot_info() is not None:
-                    self.body_return_to = self.slots[self._find_first_empty_slot()]
-                self.trade_with_equip_slot(self.body_return_to, self.head)
-                self.body.change_item(obj.id, count)
-            if equip_slot.position == "Hand":
-                # if there is no previous slot or
-                # if the slot the item should return to is occupied, we choose the first free slot
-                if self.hand_return_to is None or self.hand_return_to.get_slot_info() is not None:
-                    self.hand_return_to = self.slots[self._find_first_empty_slot()]
-                self.trade_with_equip_slot(self.hand_return_to, self.head)
-                self.hand.change_item(obj.id, count)
+            self.unequip_slot(slot_name)
+            if slot_name == "Head":
+                self.head_return_to = item_slot
+            elif slot_name == "Body":
+                self.body_return_to = item_slot
+            elif slot_name == "Hand":
+                self.hand_return_to = item_slot
+            self.slots[equip_slot.position].change_item(obj.id, count)
+        
+
+    def get_inventory_slots(self) -> dict:
+        """Get inventory slots
+
+        :return: inventory slots and items equipped on head, bosy and hand slots
+        :rtype: dict
+        """
+        return self.slots
 
     def update(self, dt):
-        for slot in self.slots.values():
-            if slot.object is not None:
-                if (objects_info.get_item_info(info="spoil_time",
-                                               obj_id=slot.object.id) is not None):
-                    slot.object.spoilage -= GameTime(seconds=dt)
-                    if slot.object.spoilage <= GameTime(seconds=0):
-                        slot.object.rot()
-
-        for slot in self.equipment_slots:
-            if slot.object is not None:
-                if (objects_info.get_item_info(info="use_time",
-                                               obj_id=slot.object.id) is not None):
-                    slot.object.time_left -= GameTime(seconds=dt)
-                    if slot.object.time_left <= GameTime(seconds=0):
-                        equip_id = slot.object.id
-                        slot.no_durability()
-                        # try to replace the item if it was consumed
-                        if slot.object is None:
-                            first_slot = self._find_first_slot(
-                                objects_info.get_item_info(info="name", obj_id=equip_id))
-                            if first_slot is not None:
-                                self.trade_with_equip_slot(self.slots[first_slot], slot)
+        for descriptor, slot in self.slots.items():
+            # if the slot is a normal inventory slot
+            if type(descriptor) == int:
+                if slot.object is not None:
+                    if (objects_info.get_item_info(info="spoil_time",
+                                                obj_id=slot.object.id) is not None):
+                        slot.object.spoilage -= GameTime(seconds=dt)
+                        if slot.object.spoilage <= GameTime(seconds=0):
+                            slot.object.rot()
+            # if the slot is a equipment slot
+            else: # type(descriptor) == str
+                if slot.object is not None:
+                    if (objects_info.get_item_info(info="use_time",
+                                                obj_id=slot.object.id) is not None):
+                        slot.object.time_left -= GameTime(seconds=dt)
+                        if slot.object.time_left <= GameTime(seconds=0):
+                            equip_id = slot.object.id
+                            slot.no_durability()
+                            # try to replace the item if it was consumed
+                            if slot.object is None:
+                                first_slot = self._find_first_slot(
+                                    objects_info.get_item_info(info="name", obj_id=equip_id))
+                                if first_slot is not None:
+                                    self.trade_with_equip_slot(self.slots[first_slot], slot)
