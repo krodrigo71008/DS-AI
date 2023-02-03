@@ -1,5 +1,6 @@
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from utility.GameTime import GameTime
+from utility.Point2d import Point2d
 
 EVERGREEN_SMALL = 31
 EVERGREEN_MEDIUM = 32
@@ -8,7 +9,7 @@ EVERGREEN_DEAD = 58
 
 
 class TreeEvergreen(ObjectWithMultipleForms):
-    def __init__(self, position, latest_screen_position, id_, update_function):
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, update_function : "function"):
         super().__init__(False, position, latest_screen_position,
                          [EVERGREEN_SMALL, EVERGREEN_MEDIUM, EVERGREEN_BIG, EVERGREEN_DEAD], id_, update_function)
         # times are random, 1*5-2*5, 3*5-7*5, 3*5-7*5 and 0.5*5-1.5*5, but I'm using the maximum value

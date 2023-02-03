@@ -1,12 +1,13 @@
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from utility.GameTime import GameTime
+from utility.Point2d import Point2d
 
 BERRYBUSH_READY = 35
 BERRYBUSH_HARVESTED = 36
 
 
 class BerryBush(ObjectWithMultipleForms):
-    def __init__(self, position, latest_screen_position, id_, update_function):
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, update_function : "function"):
         super().__init__(False, position, latest_screen_position, [BERRYBUSH_READY, BERRYBUSH_HARVESTED], id_, update_function)
         if id_ == BERRYBUSH_HARVESTED:
             self.update_function("grow", GameTime(non_winter_days=4.6875), self)

@@ -4,13 +4,13 @@ from utility.GameTime import GameTime
 
 
 class InventorySlot:
-    def __init__(self, position):
+    def __init__(self, position : int | str):
         # position is the inventory slot, so 0-14, "Head", "Body" or "Hand"
         self.position = position
         self.object : InventoryObject = None
         self.count : int = 0
 
-    def is_full(self):
+    def is_full(self) -> bool:
         if self.object is None:
             return False
         return self.count == self.object.stack_size
@@ -19,10 +19,10 @@ class InventorySlot:
         self.object = None
         self.count = 0
 
-    def add_item(self, id_, count):
+    def add_item(self, id_ : int, count : int) -> None:
         if self.object is not None:
             if self.object.id != id_:
-                raise Exception("Wrong function usage, object being added conflicts with already existing one.")
+                raise ValueError("Wrong function usage, object being added conflicts with already existing one.")
             old_count = self.count
             self.count += count
             if self.count > self.object.stack_size:
@@ -30,7 +30,7 @@ class InventorySlot:
             # For now, I'm always assuming that the new object has 100% spoilage
             if self.object.spoilage is not None:
                 self.object.spoilage = GameTime(seconds=(self.object.spoilage.seconds() * old_count
-                                        + objects_info.get_item_info(info="spoil_time", image_id=self.object.id).seconds()
+                                        + objects_info.get_item_info(info="spoil_time", obj_id=self.object.id).seconds()
                                         * (self.count - old_count)) / self.count)
         else:
             self.object = InventoryObject(id_)
@@ -38,7 +38,7 @@ class InventorySlot:
             if self.count > self.object.stack_size:
                 self.count = self.object.stack_size
 
-    def change_item(self, id_, count):
+    def change_item(self, id_ : int, count : int) -> None:
         self.reset()
         if id_ is not None:
             self.add_item(id_, count)
@@ -46,7 +46,7 @@ class InventorySlot:
     def get_slot_info(self) -> tuple[InventoryObject, int]:
         return self.object, self.count
 
-    def trade_slot(self, other_slot):
+    def trade_slot(self, other_slot : "InventorySlot") -> None:
         obj_help = self.object
         count_help = self.count
         other_obj, other_count = other_slot.get_slot_info()
@@ -59,6 +59,6 @@ class InventorySlot:
         else:
             other_slot.change_item(None, count_help)
 
-    def no_durability(self):
+    def no_durability(self) -> None:
         # note to remember that things like lantern don't break with 0 durability, but for now this is fine
         self.object = None

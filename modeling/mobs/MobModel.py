@@ -3,13 +3,13 @@ from modeling.constants import TIME_FOR_MOB_REMOVAL
 
 
 class MobModel:
-    def __init__(self, position, id_, name):
+    def __init__(self, position : Point2d, id_ : int, name : str):
         self.position = position
         self.id = id_
         self.name = name
-        self.destroy_time = TIME_FOR_MOB_REMOVAL
+        self.destroy_time : float = TIME_FOR_MOB_REMOVAL
 
-    def set_position(self, x, z):
+    def set_position(self, x : float, z : float):
         self.position = Point2d(x, z)
 
     def update(self, change):

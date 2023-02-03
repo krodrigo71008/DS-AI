@@ -8,7 +8,7 @@ from PIL import Image, ImageEnhance
 from perception.YoloIdConverter import yolo_id_converter
 from perception.screen import SCREEN_SIZE
 
-def choose_random_in_array(arr):
+def choose_random_in_array(arr : list):
     num = randint(0, len(arr)-1)
     return arr[num]
 

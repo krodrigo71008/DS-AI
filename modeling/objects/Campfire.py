@@ -1,9 +1,10 @@
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from utility.GameTime import GameTime
+from utility.Point2d import Point2d
 
 
 class Campfire(ObjectWithMultipleForms):
-    def __init__(self, position, latest_screen_position, id_, update_function):
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, update_function : "function"):
         super().__init__(False, position, latest_screen_position, [46], id_, update_function)
         # I'll add the other states later
 

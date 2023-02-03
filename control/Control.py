@@ -20,6 +20,7 @@ class Control:
         self.key_action = None
         self.mouse_action = None
         self.clock : Clock = clock
+        # whether the crafting menu is open
         self.crafting_open = False
         self.current_crafting_tab = 0
         self.crafting_tree_1 = {
@@ -31,20 +32,33 @@ class Control:
             4: ["Spear", "GrassSuit", "LogSuit", "SleepDart", "FireDart", "BlowDart", "BeeMine"],
             5: ["Garland", "RabbitEarmuffs", "StrawHat", "BeefaloHat", "TopHat"]
         }
+        # inverse indexing for the crafting tree
         self.name_to_craft_position = {}
         for key, value in self.crafting_tree_1.items():
             for index, name in enumerate(value):
                 self.name_to_craft_position[name] = (key, index)
+        # list of items we should craft
         self.items_to_craft = []
+        # for each crafting tab, in which position we are now
         self.crafting_tabs_states = [0, 0, 0, 0, 0, 0]
+        # whether we are in the middle of an action
         self.action_in_progress = False
+        # start time for the current action
         self.start_time = None
+        # which update should be done at the end of the current action
         self.update_at_end = None
+        # current action
         self.current_action = None
+        # if this is true, we should not do current action (useful for crafting for now)
         self.action_on_cooldown = False
-        self.debug = debug
+        # whether the debug part of this class should run
+        self.debug : bool = debug
+        # there are some actions with multiple steps, so this indicates whether an action was finished
         self.just_finished_action = False
+        # aux variable to help the picking up action
         self.pick_up_state : str = None
+        # aux variable for the walking to objective phase in the picking up action
+        self.estimated_time_for_objective = None
         if self.debug:
             self.records = []
             self.queue = queue
@@ -60,7 +74,7 @@ class Control:
                 should_continue = False
         if should_continue:
             self.action_on_cooldown = False
-            self.action_aux = None
+            self.estimated_time_for_objective = None
             self.just_finished_action = False
             # if the crafting tab is open and we don't want to craft anything right now, we should close it before anything else
             if secondary_action[0] != "craft" and self.crafting_open:
@@ -131,6 +145,8 @@ class Control:
                     self.current_action = secondary_action[0]
                     self.action_in_progress = True
                     self.start_time = self.clock.time()
+                else:
+                    raise ValueError("Invalid secondary action!")
         if self.debug:
             self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, self.current_action, self.pick_up_state))
             if self.queue is not None:
@@ -151,6 +167,7 @@ class Control:
                 self.action_in_progress = False
         elif self.current_action == "craft":
             self.action_on_cooldown = True
+            # if update_at_end is "craft", it is the final phase, after pressing enter 
             if self.update_at_end is not None and self.update_at_end[0] == "craft":
                 if self.clock.time() - self.start_time >= FINISH_CRAFTING_DURATION:
                     self.action_in_progress = False
@@ -174,13 +191,15 @@ class Control:
             if self.pick_up_state is None:
                 if self.clock.time() - self.start_time >= PICK_UP_STOP_DURATION:
                     self.action_in_progress = False
+            # hovering over the object
             elif self.pick_up_state == "hover":
                 if self.clock.time() - self.start_time >= PICK_UP_HOVER_DURATION:
                     self.action_in_progress = False
+            # clicking and waiting until the action is finished
             elif self.pick_up_state == "click":
                 self.action_on_cooldown = True
-                # in this case, action_aux is the estimated time to get to the object, after which the player will be still
-                if self.clock.time() - self.start_time >= self.action_aux:
+                # in this case, estimated_time_for_objective is the estimated time to get to the object, after which the player will be still
+                if self.clock.time() - self.start_time >= self.estimated_time_for_objective:
                     modeling.player_model.set_direction(None)
                 if self.clock.time() - self.start_time >= PICK_UP_DURATION:
                     self.action_in_progress = False
@@ -208,7 +227,9 @@ class Control:
         if self.action_in_progress == False and self.update_at_end is not None:
             return_value = None
             if self.update_at_end[0] == "pick_up":
+                # update_at_end[1] is the Modeling Object
                 obj_name = type(self.update_at_end[1]).__name__
+                # update the inventory depending on the collected object
                 if obj_name == "BerryBush":
                     modeling.player_model.inventory.add_item("Berries", 1)
                     self.update_at_end[1].harvest()
@@ -224,6 +245,7 @@ class Control:
                 self.pick_up_state = None
                 self.just_finished_action = True
             elif self.update_at_end[0] == "eat":
+                # update player stats depending on what we ate
                 food_stats = objects_info.get_item_info(info="food_stats", name=self.update_at_end[1])
                 modeling.player_model.health += food_stats[0]
                 modeling.player_model.hunger += food_stats[1]
@@ -231,22 +253,27 @@ class Control:
                 return_value = False
                 self.just_finished_action = True
             elif self.update_at_end[0] == "equip":
+                # update inventory accordingly
                 modeling.player_model.inventory.equip_item(self.update_at_end[1])
                 return_value = False
                 self.just_finished_action = True
             elif self.update_at_end[0] == "unequip":
+                # update inventory accordingly
                 modeling.player_model.inventory.unequip_slot(self.update_at_end[1])
                 return_value = False
                 self.just_finished_action = True
             elif self.update_at_end[0] == "craft":
+                # update inventory accordingly
                 modeling.player_model.inventory.craft(self.update_at_end[1])
                 return_value = False
                 self.just_finished_action = True
             elif self.update_at_end[0] == "change_pick_up_state":
+                # change the internal pick up state
                 change = self.update_at_end[1]
                 self.pick_up_state = change
                 return_value = True
             elif self.update_at_end[0] == "change_inv_state":
+                # change the internal inventory state
                 change = self.update_at_end[1]
                 if change == "up":
                     self.current_crafting_tab -= 1
@@ -258,6 +285,7 @@ class Control:
                     self.crafting_tabs_states[self.current_crafting_tab] += 1
                 return_value = True
             elif self.update_at_end[0] == "reset_player_direction":
+                # reset player model direction
                 modeling.player_model.set_direction(None)
                 return_value = True
                 self.just_finished_action = True
@@ -268,9 +296,10 @@ class Control:
         return False
 
     def eat(self, food_name: str, modeling: Modeling):
+        # calculate where I should click
         inv = modeling.player_model.inventory
-        slots_1 = [slot_num for slot_num in inv.slots]
-        slots_2 = [slot.object.name if slot.object is not None else None for slot in inv.slots.values()]
+        slots_1 = [slot_num for slot_num in inv.get_inventory_slots()]
+        slots_2 = [slot.object.name if slot.object is not None else None for slot in inv.get_inventory_slots().values()]
         for elem in zip(slots_1, slots_2):
             # elem is (slot_number, slot_object_name)
             if elem[1] is not None and elem[1] == food_name:
@@ -282,6 +311,7 @@ class Control:
                 return
 
     def equip(self, equip_name: str, modeling: Modeling):
+        # calculate where I should click
         inv = modeling.player_model.inventory
         slots_1 = [slot_name for slot_name in inv.get_inventory_slots()]
         slots_2 = [slot.object.name if slot.object is not None else None for slot in inv.get_inventory_slots().values()]
@@ -444,6 +474,6 @@ class Control:
             modeling.player_model.set_direction(distance_to_object.angle())
             self.update_at_end = ("pick_up", obj)
             # this is the estimated time that we'll take to get to obj
-            self.action_aux = distance_to_object.distance(Point2d(0, 0))/PLAYER_BASE_SPEED  
+            self.estimated_time_for_objective = distance_to_object.distance(Point2d(0, 0))/PLAYER_BASE_SPEED  
             # send notice that we're no longer hovering over obj
             modeling.world_model.set_hovering_over(None)          

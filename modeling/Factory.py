@@ -11,7 +11,9 @@ from modeling.objects.BerryBush import BerryBush
 from modeling.objects.Campfire import Campfire
 from modeling.objects.Rock import Rock
 from modeling.mobs.MobModel import MobModel
+from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
+from utility.Point2d import Point2d
 
 
 class Factory:
@@ -20,7 +22,20 @@ class Factory:
 
     # receives image id and returns an object
     @staticmethod
-    def create_object(image_id, pos, latest_screen_position, update_function=None):
+    def create_object(image_id : int, pos : Point2d, latest_screen_position : Point2d, update_function : "function"=None) -> ObjectModel:
+        """Create object described by image_id
+
+        :param image_id: image_id from Perception
+        :type image_id: int
+        :param pos: position in the world
+        :type pos: Point2d
+        :param latest_screen_position: latest screen position of the object
+        :type latest_screen_position: Point2d
+        :param update_function: "function" to schedule events in the world model, defaults to None
+        :type update_function: "function", optional
+        :return: requested object
+        :rtype: ObjectModel
+        """
         obj_id = objects_info.get_item_info(info="obj_id", image_id=image_id)
         if obj_id == 1:
             return TallbirdNest(pos, latest_screen_position)
@@ -96,7 +111,16 @@ class Factory:
             return PickableObjectModel(pos, latest_screen_position, obj_id, "Berries")
 
     @staticmethod
-    def create_mob(id_, pos):
+    def create_mob(id_ : int, pos : Point2d) -> MobModel:
+        """Create mob described by id_
+
+        :param id_: image_id
+        :type id_: int
+        :param pos: position in the world
+        :type pos: Point2d
+        :return: requested mob
+        :rtype: MobModel
+        """
         if id_ == 2:
             return MobModel(pos, id_, "Treeguard")
         if id_ == 3:

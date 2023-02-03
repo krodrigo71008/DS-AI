@@ -1,5 +1,6 @@
 import copy
 
+from perception.ImageObject import ImageObject
 from modeling.WorldModel import WorldModel
 from modeling.PlayerModel import PlayerModel
 from modeling.ObjectsInfo import objects_info
@@ -18,12 +19,13 @@ class Modeling:
             self.records = []
             self.queue = queue
 
-    def update_model(self, obj_list):
+    def update_model(self, obj_list : list[ImageObject]):
         self.clock.update()
         self.world_model.update()
         self.world_model.update_local(obj_list)
         self.player_model.update()
         player_positions = [Point2d.from_box(obj.box) for obj in obj_list if objects_info.get_item_info(image_id=obj.id, info="object_type") == "PLAYER"]
+        # decide which of the detected player positions is the real one
         self.world_model.decide_player_position(player_positions)
         self.world_model.start_cycle(CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
         for obj in obj_list:

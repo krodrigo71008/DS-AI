@@ -3,7 +3,7 @@ from utility.Point2d import Point2d
 
 
 class ObjectModel:
-    def __init__(self, pickable, position, latest_screen_position):
+    def __init__(self, pickable : bool, position : Point2d, latest_screen_position : Point2d):
         self.pickable = pickable
         self.position = position
         self.latest_screen_position = latest_screen_position
@@ -12,7 +12,7 @@ class ObjectModel:
     def __str__(self) -> str:
         return f"{type(self).__name__} at {self.position}"
 
-    def set_position(self, x, z):
+    def set_position(self, x : float, z : float):
         self.position = Point2d(x, z)
 
     def update(self, change):

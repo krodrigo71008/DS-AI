@@ -181,9 +181,16 @@ class ObjectsInfo:
     # there should be exactly one of the three following key arguments:
     # image_id (int), name (str) or obj_id (int)
     # example: get_item_info(info="equip_slot", image_id=60)
-    def get_item_info(self, info, **kwargs):
+    def get_item_info(self, info : str, **kwargs):
+        """Get item info according to the key arguments, there should be exactly one of these three key arguments: image_id, name or obj_id
+
+        :param info: equip_slot, max_uses, use_time, stack_size, spoil_time, crafting_recipe, food_stats, name, image_id, obj_id or object_type
+        :type info: str
+        :return: requested info
+        :rtype: it depends
+        """
         if len(kwargs) != 1:
-            raise Exception("Wrong usage! Exactly one key argument should be used.")
+            raise ValueError("Wrong usage! Exactly one key argument should be used.")
         image_id = None
         name = None
         obj_id = None
@@ -244,7 +251,7 @@ class ObjectsInfo:
             if obj_id is not None:
                 return self._item_table[self._item_table["obj_id"] == obj_id].object_type.iloc[0]
 
-        raise Exception("Not implemented!")
+        raise NotImplementedError("Not implemented!")
 
 
 objects_info = ObjectsInfo()

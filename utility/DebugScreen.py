@@ -110,7 +110,18 @@ class DebugScreen:
         self.window.update_idletasks()
         self.window.update()
 
-    def draw_fov(self, point_list, canvas_name, x1_range, x2_range):
+    def draw_fov(self, point_list : list[float], canvas_name : str, x1_range : tuple[float, float], x2_range : tuple[float, float]) -> None:
+        """Draw the fov trapezium defined by the point_list
+
+        :param point_list: list of 4 points to draw
+        :type point_list: list[float]
+        :param canvas_name: should be "global" for now
+        :type canvas_name: str
+        :param x1_range: x1 range of objects that should be drawn
+        :type x1_range: tuple[float, float]
+        :param x2_range: x2 range of objects that should be drawn
+        :type x2_range: tuple[float, float]
+        """
         # point_list should be [x1, y1, x2, y2, x3, y3, x4, y4]
         if canvas_name == "global":
             map_ = self.world_map
@@ -123,11 +134,22 @@ class DebugScreen:
             x4 = (point_list[7] - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
             y4 = (point_list[6] - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
         else:
-            raise Exception("Wrong usage!")
+            raise ValueError("Wrong usage!")
         
         map_.create_polygon(x1, y1, x2, y2, x3, y3, x4, y4, fill='', outline="black")
 
-    def draw_shape(self, x1, x2, shape, canvas_name):
+    def draw_shape(self, x1 : float, x2 : float, shape : str, canvas_name : str):
+        """Draw shape on the specified canvas
+
+        :param x1: x1 position
+        :type x1: float
+        :param x2: x2 position
+        :type x2: float
+        :param shape: triangle, circle or square
+        :type shape: str
+        :param canvas_name: "global" for now
+        :type canvas_name: str
+        """
         # if canvas_name == "local":
         #     map_ = self.local_map
         #     x1 = x1/SCREEN_SIZE["width"]*self.LOCAL_CANVAS_WIDTH
@@ -138,7 +160,7 @@ class DebugScreen:
             x = x2/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
             y = x1/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
         else:
-            raise Exception("Wrong usage!")
+            raise ValueError("Wrong usage!")
         if shape == "triangle":
             map_.create_polygon(x, y-6, x-4, y+2, x+4, y+2)
         elif shape == "circle":

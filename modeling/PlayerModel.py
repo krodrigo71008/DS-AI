@@ -6,7 +6,7 @@ from modeling.constants import PLAYER_BASE_SPEED
 
 
 class PlayerModel:
-    def __init__(self, clock):
+    def __init__(self, clock : Clock):
         self.position : Point2d = Point2d(0, 0)
         self.position_before_correction : Point2d = Point2d(0, 0)
         self.clock : Clock = clock
@@ -18,6 +18,7 @@ class PlayerModel:
         self.sanity = 200
         self.max_sanity = 200
         self.speed = PLAYER_BASE_SPEED
+        # direction in radians
         self.direction : float = None
         self.CORRECTION_GAIN = 0.9
 
@@ -39,7 +40,7 @@ class PlayerModel:
         """
         self.direction = direction
 
-    def update(self):
+    def update(self) -> None:
         self.inventory.update(self.clock.dt())
         self.move(self.clock.dt())
         self.hunger -= self.clock.dt()*75/480
@@ -47,6 +48,6 @@ class PlayerModel:
         if day_section == "Dusk" or day_section == "Night":
             self.sanity -= self.clock.dt()*5/60
 
-    def correct_error(self, err : Point2d):
+    def correct_error(self, err : Point2d) -> None:
         self.position_before_correction = self.position
         self.position -= err*self.CORRECTION_GAIN

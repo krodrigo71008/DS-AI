@@ -9,7 +9,12 @@ class Action:
         self.current_keys = set()
         self.records = []
 
-    def act(self, control: Control):
+    def act(self, control: Control) -> None:
+        """Use mouse and keyboard to perform the action decided by the Control layer
+
+        :param control: Control layer
+        :type control: Control
+        """
         # key_action is array of strings
         key_action = control.key_action
         mouse_action = control.mouse_action
@@ -48,7 +53,7 @@ class Action:
     def act_mock(self, control: Control) -> list[str]:
         """Same as act, but doesn't actually perform the action and also returns keys_to_release
 
-        :param control: control layer
+        :param control: Control layer
         :type control: Control
         :return: list of all keys that would be released if this wasn't a mock
         :rtype: list[str]

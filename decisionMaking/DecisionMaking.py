@@ -17,27 +17,30 @@ class DecisionMaking:
         self.secondary_action = None
         self.action_requester = ActionRequester()
         self.behavior_tree = DSBehaviorTree()
-        self.debug = debug
+        self.debug : bool = debug
         if self.debug:
             self.records = []
             self.queue = queue
 
     # decides the action (high level)
     # should be called every loop
-    def primary_system(self, modeling: Modeling):
+    def primary_system(self, modeling: Modeling) -> None:
         self.behavior_tree.update(modeling, self.action_requester)
         self.primary_action = self.action_requester.get_action()
 
     # decides minor steps for the primary system action
-    def secondary_system(self, modeling: Modeling):
+    def secondary_system(self, modeling: Modeling) -> None:
         if self.primary_action[0] == "gather":
             items = self.primary_action[1].copy()
             counts = modeling.player_model.inventory.get_inventory_count(["CutGrass", "Twigs"])
+            # if we have at least 4 CutGrass, that's enough
             if "CutGrass" in items and counts[0] >= 4:
                 items.remove("CutGrass")
+            # if we have at least 4 Twigs, that's enough
             if "Twigs" in items and counts[1] >= 4:
                 items.remove("Twigs")
             world = modeling.world_model
+            # if we want food, we should look for these things
             if "food" in items:
                 items.remove("food")
                 items.extend(["BerryBush", "Honey", "Carrot"])
@@ -45,9 +48,10 @@ class DecisionMaking:
                 items.append("Grass")
             if "Twigs" in items:
                 items.append("Sapling")
+            # we should only look for plants that are not harvested
             obj_lists = world.get_all_of(items, filter_="only_not_harvested")
             all_objects = []
-            for obj_name, obj_list in obj_lists.items():
+            for obj_list in obj_lists.values():
                 all_objects = [*all_objects, *obj_list]
             locations = [obj.position for obj in all_objects]
             if len(locations) == 0:
@@ -60,7 +64,8 @@ class DecisionMaking:
             self.secondary_action = ("unequip", "Hand")
 
     # takes control when needed
-    def emergency_system(self, modeling: Modeling):
+    def emergency_system(self, modeling: Modeling) -> None:
+        # if hunger is too low
         if modeling.player_model.hunger < 30:
             foods = ["Seeds", "MonsterMeat", "Honey", "FrogLegs", "Meat", "Berries"]
             food_counts = modeling.player_model.inventory.get_inventory_count(foods)
@@ -72,6 +77,7 @@ class DecisionMaking:
                 if modeling.player_model.hunger < 15:
                     hunger_points_to_fill = modeling.player_model.max_hunger - modeling.player_model.hunger
                     self.decide_what_to_eat(foods, food_counts, hunger_points_to_fill)
+        # if it's nighttime
         elif modeling.clock.day_section() == "Night":
             torch_count = modeling.player_model.inventory.get_inventory_count(["Torch"])
             # this will fail if we don't have materials to craft it, but we should have enough
@@ -88,7 +94,7 @@ class DecisionMaking:
             ]
             monster_lists = modeling.world_model.get_all_of(monsters)
             all_objects = []
-            for monster_name, monster_list in monster_lists.items():
+            for monster_list in monster_lists.values():
                 all_objects = [*all_objects, *monster_list]
             locations = [obj.position for obj in all_objects]
             distances = [location.distance(modeling.player_model.position) for location in locations]
@@ -98,7 +104,7 @@ class DecisionMaking:
                     self.run_away_from(locations[closest_index], modeling.player_model.position)
 
     # helps with inventory management
-    def inventory_management_system(self, modeling: Modeling):
+    def inventory_management_system(self, modeling: Modeling) -> None:
         pass
 
     def choose_destination(self, objectives: list[Point2d], player_position: Point2d,
@@ -127,20 +133,23 @@ class DecisionMaking:
 
     def decide_what_to_eat(self, foods: list[str], food_counts: list[int], hunger_points_to_fill: float) -> None:
         # this will definitely be changed later
+        # we choose the food that would damage our health the least for now
         best_food_and_count = (None, None)
         for pair in zip(foods, food_counts):
             food_name, count = pair
             food_info = objects_info.get_item_info(info="food_stats", name=food_name)
             health_value = food_info[0]
             hunger_value = food_info[1]
+            # how much we need to eat to fill our hunger enough
             count_to_fill = hunger_points_to_fill//hunger_value
             effective_count = min(count_to_fill, count)
+            # how eating all this would affect my health
             health_delta = effective_count*health_value
             if best_food_and_count[1] is None or health_delta > best_food_and_count[1]:
                 best_food_and_count = ((food_name, effective_count), health_delta)
         self.secondary_action = ("eat", best_food_and_count[0])
 
-    def run_away_from(self, danger_position: Point2d, player_position: Point2d):
+    def run_away_from(self, danger_position: Point2d, player_position: Point2d) -> None:
         # direction_to_run in radians
         direction_to_run = (player_position - danger_position).angle()
         self.secondary_action = ("run", direction_to_run)

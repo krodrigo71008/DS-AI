@@ -35,7 +35,16 @@ class Visualizer:
         img = Image.fromarray(image[:, :, ::-1])
         self.perception_image = img
     
-    def draw_detected_objects(self, classes, scores, boxes):
+    def draw_detected_objects(self, classes : list[int], scores : list[float], boxes : tuple[int, int, int, int]) -> None:
+        """Draw detected objects
+
+        :param classes: list of identified classes
+        :type classes: list[int]
+        :param scores: estimated accuracy for each object
+        :type scores: list[float]
+        :param boxes: bounding boxes for each object
+        :type boxes: list[list[int]]
+        """
         np_image = np.asarray(self.perception_image)
         res, _ = draw_annotations(np_image, classes, scores, boxes)
         res_image = Image.fromarray(res, mode="RGB")
@@ -46,7 +55,12 @@ class Visualizer:
         draw.text((SCREEN_SIZE["width"]//2 + SCREEN_SIZE["width"]//4, SCREEN_SIZE["height"]//2+SCREEN_SIZE["height"]//4), 
             "O", fill="red", font=self.font, anchor="mm")
     
-    def update_world_model(self, modeling : Modeling):
+    def update_world_model(self, modeling : Modeling) -> None:
+        """Update world model
+
+        :param modeling: modeling
+        :type modeling: Modeling
+        """
         objects = modeling.world_model.object_lists
         player = modeling.player_model
         vision_corners = (modeling.world_model.c1, modeling.world_model.c2, modeling.world_model.c3, modeling.world_model.c4)
@@ -62,7 +76,7 @@ class Visualizer:
         draw.rectangle((0, 0, 
                         self.WORLD_CANVAS_WIDTH, self.WORLD_CANVAS_HEIGHT), 
                         outline="red")
-        world_objects = []
+        world_objects : list[tuple[str, Point2d]] = []
         for name, object_list in objects.items():
             if name == "Grass":
                 for obj in object_list:
@@ -77,8 +91,30 @@ class Visualizer:
                                 vision_corners, deletion_corners, origin_coordinates, 
                                 new_recent_obj, estimation_pairs)
 
-    def draw_world_model(self, world_objects, player_position, player_position_no_corrections,
-                            vision_corners, deletion_corners, origin_coordinates, recent_objects, estimation_pairs):
+    def draw_world_model(self, world_objects : list[tuple[str, Point2d]], player_position : Point2d, player_position_no_corrections : Point2d,
+                            vision_corners : tuple[Point2d, Point2d, Point2d, Point2d], 
+                            deletion_corners : tuple[Point2d, Point2d, Point2d, Point2d], 
+                            origin_coordinates : Point2d, recent_objects : list[tuple[str, Point2d]], 
+                            estimation_pairs : list[tuple[str, Point2d, Point2d]]) -> None:
+        """Draw world model
+
+        :param world_objects: list of relevant world objects
+        :type world_objects: list[tuple[str, Point2d]]
+        :param player_position: player position before corrections
+        :type player_position: Point2d
+        :param player_position_no_corrections: player position after corrections
+        :type player_position_no_corrections: Point2d
+        :param vision_corners: region currently on screen
+        :type vision_corners: tuple[Point2d, Point2d, Point2d, Point2d]
+        :param deletion_corners: region that is being considered for deletion
+        :type deletion_corners: tuple[Point2d, Point2d, Point2d, Point2d]
+        :param origin_coordinates: origin coordinates
+        :type origin_coordinates: Point2d
+        :param recent_objects: objects that have been detected but not yet added to the world model
+        :type recent_objects: list[tuple[str, Point2d]]
+        :param estimation_pairs: list of tuples of object name, estimated position and model position
+        :type estimation_pairs: list[tuple[str, Point2d, Point2d]]
+        """
         if player_position is not None:
             x1_range = (player_position.x1 - self.CLOSE_OBJECTS_X1/2, player_position.x1 + self.CLOSE_OBJECTS_X1/2)
             x2_range = (player_position.x2 - self.CLOSE_OBJECTS_X2/2, player_position.x2 + self.CLOSE_OBJECTS_X2/2)

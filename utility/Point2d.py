@@ -2,7 +2,7 @@ import math
 
 
 class Point2d:
-    def __init__(self, x1, x2):
+    def __init__(self, x1 : float, x2 : float):
         self.x1 = x1
         self.x2 = x2
 

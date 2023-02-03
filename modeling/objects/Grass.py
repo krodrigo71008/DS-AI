@@ -1,12 +1,13 @@
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from utility.GameTime import GameTime
+from utility.Point2d import Point2d
 
 GRASS_READY = 21
 GRASS_HARVESTED = 22
 
 
 class Grass(ObjectWithMultipleForms):
-    def __init__(self, position, latest_screen_position, id_, update_function):
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, update_function : "function"):
         super().__init__(False, position, latest_screen_position, [GRASS_READY, GRASS_HARVESTED], id_, update_function)
         if id_ == GRASS_HARVESTED:
             self.update_function("grow", GameTime(non_winter_days=3), self)

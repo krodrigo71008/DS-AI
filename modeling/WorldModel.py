@@ -2,12 +2,13 @@ import heapq
 import math
 import time
 
+from perception.ImageObject import ImageObject
 from modeling.PlayerModel import PlayerModel
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from modeling.Factory import factory
 from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_FOR_OBJECT_REMOVAL, CYCLES_TO_ADMIT_OBJECT
-from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING, CHUNK_SIZE
+from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING, CHUNK_SIZE, DISTANCE_FOR_VALID_PLAYER_POSITION
 from modeling.ObjectsInfo import objects_info
 from perception.screen import SCREEN_SIZE
 from utility.Clock import Clock
@@ -54,7 +55,7 @@ class WorldModel:
         self.c3_deletion_border : Point2d = None
         self.c4_deletion_border : Point2d = None
         self.estimation_errors : list[Point2d] = []
-        self.estimation_pairs : list[tuple[Point2d, Point2d]] = []
+        self.estimation_pairs : list[tuple[str, Point2d, Point2d]] = []
         self.avg_observed_error : Point2d = None
         self.recent_objects : list[list[ObjectModel, int]] = []
         self.additions_to_recent_objects : list[list[ObjectModel, int]] = []
@@ -86,7 +87,7 @@ class WorldModel:
             required.append((cur[0]+1, cur[1]+1))
         return required
 
-    def update(self):
+    def update(self) -> None:
         # the [0] gets the 'timestamp' in which the change should happen
         while len(self.update_queue) > 0 and self.update_queue[0][0] < self.clock.time():
             tup = heapq.heappop(self.update_queue)
@@ -101,14 +102,14 @@ class WorldModel:
 
         self.mob_list = set(filter(lambda mob: mob.update_destruction_time(self.clock.dt()), self.mob_list))
 
-    def update_local(self, object_list):
+    def update_local(self, object_list : list[ImageObject]):
         self.local_objects = object_list
 
     # time_delta should be GameTime
-    def schedule_update(self, pos, creation_time, change, time_delta, instance):
+    def schedule_update(self, pos : Point2d, creation_time : float, change : str, time_delta : float, instance : ObjectModel):
         heapq.heappush(self.update_queue, (self.clock.time_from_now(time_delta), creation_time, pos, change, instance))
 
-    def decide_player_position(self, player_positions : list[Point2d]):
+    def decide_player_position(self, player_positions : list[Point2d]) -> None:
         if len(player_positions) == 0:
             return
         player_pos = None
@@ -116,7 +117,7 @@ class WorldModel:
         for possibility in player_positions:
             # if the detected player is that far from the center of the screen, it's a false positive
             distance_to_center = possibility.distance(Point2d(SCREEN_SIZE["width"]//2, SCREEN_SIZE["height"]//2))
-            if distance_to_center < 300:
+            if distance_to_center < DISTANCE_FOR_VALID_PLAYER_POSITION:
                 if player_pos is None:
                     player_pos = possibility
                     best_distance = distance_to_center
@@ -237,7 +238,7 @@ class WorldModel:
         pos = self.local_to_almost_global_position(local_position, heading, pitch, distance, fov)
         return self.origin_coordinates + pos
 
-    def object_detected(self, image_obj) -> None:
+    def object_detected(self, image_obj : ImageObject) -> None:
         # anchor points are usually at the bottom (y) and middle (x)
         pos = self.local_to_global_position(
             Point2d.from_box(image_obj.box),
@@ -295,7 +296,7 @@ class WorldModel:
         # else:
         #     self.objects_by_chunks[self.point_to_chunk_index(pos)] = [obj]
 
-    def mob_detected(self, image_obj):
+    def mob_detected(self, image_obj : ImageObject):
         # this is just plain wrong, but for now I'll leave it commented for reference
         # pos = image_obj.position_from_player()
         # for mob in self.mob_list:
@@ -400,7 +401,17 @@ class WorldModel:
         self.hovering_object = obj
 
     # returns dict of objects
-    def get_all_of(self, obj_list : list[str], filter_ : str = None) -> dict:
+    def get_all_of(self, obj_list : list[str], filter_ : str = None) -> dict[str, list[ObjectModel]]:
+        """Get all of objects of the requested types, possibly filtered by some criteria
+
+        :param obj_list: list of object names
+        :type obj_list: list[str]
+        :param filter_: filter name, defaults to None
+        :type filter_: str, optional
+        :raises ValueError: _description_
+        :return: dict with keys being object names and values being lists of objects
+        :rtype: dict[str, list[ObjectModel]]
+        """
         result = {}
         for obj in obj_list:
             if obj in self.object_lists.keys():
@@ -419,7 +430,7 @@ class WorldModel:
                                 res_aux.append(obj_aux)
                         result[obj] = res_aux
                     else:
-                        raise Exception("Filter not implemented")
+                        raise ValueError("Filter not implemented")
             else:
                 result[obj] = []
         return result
