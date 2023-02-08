@@ -1,6 +1,7 @@
 import heapq
 import math
 import time
+import queue
 
 from perception.ImageObject import ImageObject
 from modeling.PlayerModel import PlayerModel
@@ -38,6 +39,7 @@ class WorldModel:
         # (x1, x2) -> list
         self.objects_by_chunks : dict[tuple[int, int], list[ObjectModel]] = {}
         self.mob_list = set()
+        self.explored_chunks = set()
         # update_queue has (time, object_id, index, change)
         self.update_queue = []
         self.detected_this_cycle : list[list[ObjectModel, bool]] = {}
@@ -61,29 +63,69 @@ class WorldModel:
         self.additions_to_recent_objects : list[list[ObjectModel, int]] = []
         self.hovering_object : ObjectModel = None
 
-    def point_to_chunk_index(self, p : Point2d) -> tuple[int, int]:
+    @staticmethod
+    def coords_to_chunk_coords(p : Point2d) -> Point2d:
+        """Convert coordinates to chunk coordinates, bounded in [0, CHUNK_SIZE]
+
+        :param p: point to convert
+        :type p: Point2d
+        :return: converted coordinates
+        :rtype: Point2d
+        """
+        x1 = p.x1 - math.floor(p.x1/CHUNK_SIZE)*CHUNK_SIZE
+        x2 = p.x2 - math.floor(p.x2/CHUNK_SIZE)*CHUNK_SIZE
+        return Point2d(x1, x2)
+
+    def decide_if_explored(self, player_position : Point2d) -> bool:
+        """Calculates if the current chunk should be considered explored
+
+        :param player_position: current player position
+        :type player_position: Point2d
+        :return: whether it should be considered explored
+        :rtype: bool
+        """
+        x1 = player_position.x1 - math.floor(player_position.x1/CHUNK_SIZE)*CHUNK_SIZE
+        x2 = player_position.x2 - math.floor(player_position.x2/CHUNK_SIZE)*CHUNK_SIZE
+        return x1 > 0.4*CHUNK_SIZE and x1 < 0.6*CHUNK_SIZE and x2 > 0.4*CHUNK_SIZE and x2 < 0.6*CHUNK_SIZE
+
+    @staticmethod
+    def point_to_chunk_index(p : Point2d) -> tuple[int, int]:
+        """Convert a point to its corresponding chunk index
+
+        :param p: point to be converted
+        :type p: Point2d
+        :return: chunk index
+        :rtype: tuple[int, int]
+        """
         return (math.floor(p.x1/CHUNK_SIZE), math.floor(p.x2/CHUNK_SIZE))
     
     def required_nearby_chunks(self, p : Point2d) -> list[tuple[int, int]]:
+        """Calculates which nearby chunks should be checked for nearby objects (two close objects could be in 
+        different chunks if close to a border)
+
+        :param p: object position
+        :type p: Point2d
+        :return: list of required chunks
+        :rtype: list[tuple[int, int]]
+        """
         cur = self.point_to_chunk_index(p)
-        x = p.x1 - math.floor(p.x1/CHUNK_SIZE)*CHUNK_SIZE
-        z = p.x2 - math.floor(p.x2/CHUNK_SIZE)*CHUNK_SIZE
+        chunk_pos = self.coords_to_chunk_coords(p)
         required = []
-        if x < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.x1 < DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]-1, cur[1]))
-        elif x > CHUNK_SIZE - DISTANCE_FOR_SAME_OBJECT:
+        elif chunk_pos.x1 > CHUNK_SIZE - DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]+1, cur[1]))
-        if z < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.x2 < DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0], cur[1]-1))
-        elif z > CHUNK_SIZE - DISTANCE_FOR_SAME_OBJECT:
+        elif chunk_pos.x2 > CHUNK_SIZE - DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0], cur[1]+1))
-        if Point2d(x, z).distance(Point2d(0, 0)) < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.distance(Point2d(0, 0)) < DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]-1, cur[1]-1))
-        if Point2d(x, z).distance(Point2d(0, CHUNK_SIZE)) < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.distance(Point2d(0, CHUNK_SIZE)) < DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]-1, cur[1]+1))
-        if Point2d(x, z).distance(Point2d(CHUNK_SIZE, 0)) < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.distance(Point2d(CHUNK_SIZE, 0)) < DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]+1, cur[1]-1))
-        if Point2d(x, z).distance(Point2d(CHUNK_SIZE, CHUNK_SIZE)) < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.distance(Point2d(CHUNK_SIZE, CHUNK_SIZE)) < DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]+1, cur[1]+1))
         return required
 
@@ -102,14 +144,19 @@ class WorldModel:
 
         self.mob_list = set(filter(lambda mob: mob.update_destruction_time(self.clock.dt()), self.mob_list))
 
-    def update_local(self, object_list : list[ImageObject]):
+    def update_local(self, object_list : list[ImageObject]) -> None:
         self.local_objects = object_list
 
     # time_delta should be GameTime
-    def schedule_update(self, pos : Point2d, creation_time : float, change : str, time_delta : float, instance : ObjectModel):
+    def schedule_update(self, pos : Point2d, creation_time : float, change : str, time_delta : float, instance : ObjectModel) -> None:
         heapq.heappush(self.update_queue, (self.clock.time_from_now(time_delta), creation_time, pos, change, instance))
 
     def decide_player_position(self, player_positions : list[Point2d]) -> None:
+        """Decide which one of the given possible positions is the real one
+
+        :param player_positions: list of the currently detected player screen positions
+        :type player_positions: list[Point2d]
+        """
         if len(player_positions) == 0:
             return
         player_pos = None
@@ -381,6 +428,32 @@ class WorldModel:
         else:
             self.avg_observed_error = Point2d(0, 0)
         
+        # mark current chunk as explored if applicable
+        player_chunk = self.point_to_chunk_index(self.player.position)
+        if self.decide_if_explored(self.player.position):
+            self.explored_chunks.add(player_chunk)
+
+    def get_closest_unexplored_chunk(self) -> tuple[int, int]:
+        """Get closest unexplored chunk
+
+        :return: chunk index of the closest unexplored chunk
+        :rtype: tuple[int, int]
+        """
+        di = [-1, 0, 1, 0]
+        dj = [0, 1, 0, -1]
+        used_list = set()
+        potential_list = queue.Queue()
+        chunk_aux = self.point_to_chunk_index(self.player.position)
+        while True:
+            if chunk_aux not in self.explored_chunks:
+                return chunk_aux
+            for k in range(4):
+                if (chunk_aux[0] + di[k], chunk_aux[1] + dj[k]) not in used_list:
+                    potential_list.put((chunk_aux[0] + di[k], chunk_aux[1] + dj[k]))
+            used_list.add(chunk_aux)
+            chunk_aux = potential_list.get()
+
+
     def get_current_chunks(self) -> list[tuple[int, int]]:
         """Gets chunks that could have objects being currently rendered
 

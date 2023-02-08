@@ -5,7 +5,10 @@ import queue
 from PIL import Image, ImageTk
 
 from perception.screen import SCREEN_SIZE
+from modeling.constants import CHUNK_SIZE
 from modeling.ObjectsInfo import objects_info
+from utility.utility import get_multiples_in_range
+from utility.Point2d import Point2d
 
 class DebugScreen:
     # reminder that the two below this are in pixels
@@ -48,6 +51,7 @@ class DebugScreen:
         self.world_map_div.grid(row=2, column=1, rowspan=3)
         self.player_position = None
         self.world_objects = []
+        self.objective : Point2d = None
         self.fov_corners : list[float] = []
     
     def update(self):
@@ -65,7 +69,11 @@ class DebugScreen:
                 else:
                     self.mouse_label["text"] = f"Mouse command: {str(info[1][0])}, {str(info[1][1])}"
             elif info[0] == "current_action":
-                self.current_action_label["text"] = "Current action: " + str(info[1])
+                if info[1][0] == "go_to" or info[1][0] == "explore":
+                    self.objective = info[1][1]
+                    self.current_action_label["text"] = f"Current action: {str(info[1][0])}, {str(info[1][1])}"
+                else:
+                    self.current_action_label["text"] = "Current action: " + str(info[1])
             # elif info[0] == "local_objects":
             #     self.local_map.delete('all')
             #     for item in info[1]:
@@ -100,15 +108,24 @@ class DebugScreen:
             for name, position in self.world_objects:
                 if position.x1 > x1_range[0] and position.x1 < x1_range[1] and position.x2 > x2_range[0] and position.x2 < x2_range[1]:
                     if name == "Grass":
-                        self.draw_shape(position.x1-x1_range[0], position.x2-x2_range[0], "triangle", "global")
+                        self.draw_shape(position.x1, position.x2, "triangle", "global", x1_range, x2_range)
                     elif name == "Sapling":
-                        self.draw_shape(position.x1-x1_range[0], position.x2-x2_range[0], "square", "global")
-            self.draw_shape(self.CLOSE_OBJECTS_X1/2, self.CLOSE_OBJECTS_X2/2, "circle", "global")
+                        self.draw_shape(position.x1, position.x2, "square", "global", x1_range, x2_range)
+            self.draw_shape(self.player_position.x1, self.player_position.x2, "circle", "global", x1_range, x2_range)
+            if self.objective is not None:
+                self.draw_shape(self.objective.x1, self.objective.x2, "x", "global", x1_range, x2_range)
             self.draw_fov(self.fov_corners, "global", x1_range, x2_range)
+            self.draw_chunk_lines_world_canvas(CHUNK_SIZE, x1_range, x2_range)
             self.player_position = None
+            self.objective = None
             self.world_objects = []
         self.window.update_idletasks()
         self.window.update()
+
+    def convert_world_coords_to_world_graph(self, x1, x2, x1_range, x2_range):
+        x = (x2 - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
+        y = (x1 - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
+        return x, y
 
     def draw_fov(self, point_list : list[float], canvas_name : str, x1_range : tuple[float, float], x2_range : tuple[float, float]) -> None:
         """Draw the fov trapezium defined by the point_list
@@ -125,20 +142,30 @@ class DebugScreen:
         # point_list should be [x1, y1, x2, y2, x3, y3, x4, y4]
         if canvas_name == "global":
             map_ = self.world_map
-            x1 = (point_list[1] - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
-            y1 = (point_list[0] - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
-            x2 = (point_list[3] - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
-            y2 = (point_list[2] - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
-            x3 = (point_list[5] - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
-            y3 = (point_list[4] - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
-            x4 = (point_list[7] - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
-            y4 = (point_list[6] - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
+            x1, y1 = self.convert_world_coords_to_world_graph(point_list[0], point_list[1], x1_range, x2_range)
+            x2, y2 = self.convert_world_coords_to_world_graph(point_list[2], point_list[3], x1_range, x2_range)
+            x3, y3 = self.convert_world_coords_to_world_graph(point_list[4], point_list[5], x1_range, x2_range)
+            x4, y4 = self.convert_world_coords_to_world_graph(point_list[6], point_list[7], x1_range, x2_range)
         else:
             raise ValueError("Wrong usage!")
         
         map_.create_polygon(x1, y1, x2, y2, x3, y3, x4, y4, fill='', outline="black")
+    
+    def draw_chunk_lines_world_canvas(self, chunk_size : int, x1_range : tuple[int, int], x2_range : tuple[int, int]):
+        x1_lines = get_multiples_in_range(chunk_size, x1_range)
+        x2_lines = get_multiples_in_range(chunk_size, x2_range)
+        map_ = self.world_map
+        for x1 in x1_lines:
+            # x1 is y in the graph
+            _, y = self.convert_world_coords_to_world_graph(x1, 0, x1_range, x2_range)
+            map_.create_line(0, y, self.WORLD_CANVAS_WIDTH, y)
+        for x2 in x2_lines:
+            # x2 is x in the graph
+            x, _ = self.convert_world_coords_to_world_graph(0, x2, x1_range, x2_range)
+            map_.create_line(x, 0, x, self.WORLD_CANVAS_HEIGHT)
 
-    def draw_shape(self, x1 : float, x2 : float, shape : str, canvas_name : str):
+    def draw_shape(self, x1 : float, x2 : float, shape : str, canvas_name : str, 
+                   x1_range : tuple[float, float], x2_range : tuple[float, float]):
         """Draw shape on the specified canvas
 
         :param x1: x1 position
@@ -149,6 +176,10 @@ class DebugScreen:
         :type shape: str
         :param canvas_name: "global" for now
         :type canvas_name: str
+        :param x1_range: x1 range of objects that should be drawn
+        :type x1_range: tuple[float, float]
+        :param x2_range: x2 range of objects that should be drawn
+        :type x2_range: tuple[float, float]
         """
         # if canvas_name == "local":
         #     map_ = self.local_map
@@ -157,8 +188,7 @@ class DebugScreen:
         # elif canvas_name == "global":
         if canvas_name == "global":
             map_ = self.world_map
-            x = x2/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
-            y = x1/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
+            x, y = self.convert_world_coords_to_world_graph(x1, x2, x1_range, x2_range)
         else:
             raise ValueError("Wrong usage!")
         if shape == "triangle":
@@ -167,3 +197,6 @@ class DebugScreen:
             map_.create_oval(x-4, y-4, x+4, y+4)
         elif shape == "square":
             map_.create_rectangle(x-4, y-4, x+4, y+4)
+        elif shape == "x":
+            map_.create_line(x-6, y-6, x+6, y+6, fill="red")
+            map_.create_line(x+6, y-6, x-6, y+6, fill="red")

@@ -6,7 +6,7 @@ from modeling.PlayerModel import PlayerModel
 from perception.screen import SCREEN_SIZE
 from modeling.constants import CHUNK_SIZE, DISTANCE_FOR_SAME_OBJECT
 from utility.Point2d import Point2d
-from utility.utility import draw_annotations
+from utility.utility import draw_annotations, get_multiples_in_range
 
 class Visualizer:
     # reminder that the two below this are in in-game units
@@ -179,32 +179,14 @@ class Visualizer:
         draw = ImageDraw.Draw(self.image)
         draw.line((conv_est_x, conv_est_y, conv_mod_x, conv_mod_y), fill="dimgray")
 
-
-    def _get_multiples_in_range(self, number : int, range_ : tuple[int, int]) -> list[int]:
-        """Get multiples of number inside the range range_
-
-        :param number: number to find multiples of
-        :type number: int
-        :param range_: range to filter multiples
-        :type range_: tuple[int, int]
-        :return: list of multiples inside the given range
-        :rtype: list[int]
-        """
-        aux_ = round(range_[0]/number)*number
-        ans = []
-        while aux_ < range_[1]:
-            ans.append(aux_)
-            aux_ += number
-        return ans
-
     def convert_world_coords_to_world_graph(self, x1, x2, x1_range, x2_range):
         x = (x2 - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
         y = (x1 - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
         return x, y
     
     def draw_chunk_lines_world_canvas(self, chunk_size, x1_range, x2_range):
-        x1_lines = self._get_multiples_in_range(chunk_size, x1_range)
-        x2_lines = self._get_multiples_in_range(chunk_size, x2_range)
+        x1_lines = get_multiples_in_range(chunk_size, x1_range)
+        x2_lines = get_multiples_in_range(chunk_size, x2_range)
         draw = ImageDraw.Draw(self.image)
         for x1 in x1_lines:
             # x1 is y in the graph

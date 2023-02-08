@@ -162,6 +162,23 @@ def is_inside_convex_polygon(points: list[Point2d], p: Point2d) -> bool:
     # Return true if count is odd, false otherwise
     return True
 
+def get_multiples_in_range(number : int, range_ : tuple[int, int]) -> list[int]:
+    """Get multiples of number inside the range range_
+
+    :param number: number to find multiples of
+    :type number: int
+    :param range_: range to filter multiples
+    :type range_: tuple[int, int]
+    :return: list of multiples inside the given range
+    :rtype: list[int]
+    """
+    aux_ = round(range_[0]/number)*number
+    ans = []
+    while aux_ < range_[1]:
+        ans.append(aux_)
+        aux_ += number
+    return ans
+
 def draw_annotations(image : np.array, classes : list[int], scores : list[float], boxes : list[list[int]]) -> tuple[np.array, list[str]]:
     """Draws (into image) annotations described by classes, scores and boxes
 

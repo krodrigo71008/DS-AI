@@ -1,15 +1,14 @@
 import math
-from random import randint
 from math import sqrt, pi
 
 from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, HAND_INVENTORY_POSITION, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, CRAFT_KEYPRESS_DURATION
-from control.constants import PICK_UP_DURATION, PICK_UP_STOP_DURATION, PICK_UP_HOVER_DURATION, RUN_DURATION, FINISH_CRAFTING_DURATION
+from control.constants import PICK_UP_DURATION, PICK_UP_STOP_DURATION, PICK_UP_HOVER_DURATION, RUN_DURATION, FINISH_CRAFTING_DURATION, EXPLORE_DURATION
 from decisionMaking.DecisionMaking import DecisionMaking
 from decisionMaking.constants import PICK_UP_DISTANCE, CLOSE_ENOUGH_DISTANCE
 from modeling.Modeling import Modeling
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
-from modeling.constants import CAMERA_HEADING, PLAYER_BASE_SPEED
+from modeling.constants import CAMERA_HEADING, PLAYER_BASE_SPEED, CHUNK_SIZE
 from utility.Point2d import Point2d
 from utility.Clock import Clock
 from utility.utility import clamp2pi
@@ -59,6 +58,8 @@ class Control:
         self.pick_up_state : str = None
         # aux variable for the walking to objective phase in the picking up action
         self.estimated_time_for_objective = None
+        # aux variable for the go_towards or go_precisely_towards action
+        self.objective = None
         if self.debug:
             self.records = []
             self.queue = queue
@@ -75,6 +76,7 @@ class Control:
         if should_continue:
             self.action_on_cooldown = False
             self.estimated_time_for_objective = None
+            self.objective = None
             self.just_finished_action = False
             # if the crafting tab is open and we don't want to craft anything right now, we should close it before anything else
             if secondary_action[0] != "craft" and self.crafting_open:
@@ -150,7 +152,10 @@ class Control:
         if self.debug:
             self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, self.current_action, self.pick_up_state))
             if self.queue is not None:
-                self.queue.put(("current_action", self.current_action))
+                if self.current_action == "go_to" or self.current_action == "explore":
+                    self.queue.put(("current_action", (self.current_action, self.objective)))
+                else:
+                    self.queue.put(("current_action", self.current_action))
                 self.queue.put(("key_action", self.key_action))
                 self.queue.put(("mouse_action", self.mouse_action))
 
@@ -184,7 +189,7 @@ class Control:
             if self.clock.time() - self.start_time >= RUN_DURATION:
                 self.action_in_progress = False
         elif self.current_action == "explore":
-            if self.clock.time() - self.start_time >= KEYPRESS_DURATION:
+            if self.clock.time() - self.start_time >= EXPLORE_DURATION:
                 self.action_in_progress = False
         elif self.current_action == "pick_up_item":
             # in this case, we're waiting a bit before hovering
@@ -369,6 +374,7 @@ class Control:
         self.mouse_action = None
 
     def go_towards(self, objective: Point2d, modeling: Modeling):
+        self.objective = objective
         player_position = modeling.player_model.position
         # PICK_UP_DISTANCE means that we should click it with mouse
         if objective.distance(player_position) < PICK_UP_DISTANCE:
@@ -384,6 +390,7 @@ class Control:
         self.update_at_end = ("reset_player_direction",)
 
     def go_precisely_towards(self, objective: Point2d, modeling: Modeling):
+        self.objective = objective
         player_position = modeling.player_model.position
         if objective.distance(player_position) < CLOSE_ENOUGH_DISTANCE:
             self.key_action = None
@@ -442,15 +449,11 @@ class Control:
         return keys
 
 
-    def explore(self, modeling):
+    def explore(self, modeling : Modeling):
         # reminder to somehow check that I'm not stuck somewhere
-        direction = randint(0, 7)
-        dx = [1, 1, 0, -1, -1, -1, 0, 1]
-        dy = [0, -1, -1, -1, 0, 1, 1, 1]
-        norm = [1, sqrt(2), 1, sqrt(2), 1, sqrt(2), 1, sqrt(2)]
-        DISTANCE = 100
-        objective = (modeling.world_model.player.position + Point2d(dx[direction], dy[direction])
-                     * (DISTANCE/norm[direction]))
+        chunk = modeling.world_model.get_closest_unexplored_chunk()
+        # objective is the central point of the chunk
+        objective = Point2d(chunk[0]*CHUNK_SIZE + CHUNK_SIZE/2, chunk[1]*CHUNK_SIZE + CHUNK_SIZE/2)
         self.go_towards(objective, modeling)
 
     def pick_up(self, obj : ObjectModel, modeling : Modeling):
