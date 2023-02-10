@@ -36,7 +36,7 @@ class Modeling:
         self.world_model.finish_cycle()
         self.player_model.correct_error(self.world_model.avg_observed_error)
         if self.debug:
-            self.records.append(copy.deepcopy((self.world_model.object_lists, self.world_model.mob_list, self.player_model)))
+            self.records.append(copy.deepcopy((self.world_model.object_lists, self.world_model.mob_list, self.player_model, self.clock.time_in_seconds)))
             #  self.queue.put(("local_objects", copy.deepcopy(self.world_model.local_objects)))
             self.queue.put(("world_model_objects", copy.deepcopy(self.world_model.object_lists)))
             self.queue.put(("fov_corners", [self.world_model.c1, self.world_model.c2, self.world_model.c3, self.world_model.c4]))

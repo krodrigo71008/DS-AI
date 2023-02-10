@@ -70,7 +70,7 @@ class NegateNode(TreeNode):
     Represents a negate node of a behavior tree.
     """
     def __init__(self, node: TreeNode):
-        super().__init__(f"Not ${node.node_name}")
+        super().__init__(f"Not {node.node_name}")
         self.negated_node = node
 
     def enter(self, modeling, action_requester):
@@ -88,6 +88,25 @@ class NegateNode(TreeNode):
         elif status == ExecutionStatus.SUCCESS:
             # Negate the child's return value
             return ExecutionStatus.FAILURE
+
+
+class LoopNode(TreeNode):
+    """
+    Represents a loop node of a behavior tree that executes its node while it returns success.
+    """
+    def __init__(self, node: TreeNode):
+        super().__init__(f"Loop {node.node_name}")
+        self.looped_node = node
+
+    def enter(self, modeling, action_requester):
+        pass
+
+    def execute(self, modeling, action_requester):
+        # Execute the child
+        status = self.looped_node.execute(modeling, action_requester)
+        while status == ExecutionStatus.SUCCESS:
+            status = self.looped_node.execute(modeling, action_requester)
+        return status
 
 
 class LeafNode(TreeNode):
@@ -237,18 +256,18 @@ class DSBehaviorTree(BehaviorTree):
     """
     def __init__(self):
         super().__init__()
-        self.root = SelectorNode("Select1")
-        self.root.add_child(SequenceNode("Sequence1"))
-        self.root.add_child(SequenceNode("Sequence2"))
-        self.root.add_child(SequenceNode("Sequence3"))
-        self.root.add_child(GatherFood())
-        self.root.children[0].add_child(CheckTorchEquipped())
-        self.root.children[0].add_child(IsDayTime())
-        self.root.children[0].add_child(UnequipTorch())
-        self.root.children[1].add_child(NegateNode(CheckEnoughGrassTwigs()))
-        self.root.children[1].add_child(GatherGrassTwigs())
-        self.root.children[2].add_child(NegateNode(CheckTorch()))
-        self.root.children[2].add_child(CraftTorch())
+        self.root = LoopNode(SelectorNode("Select1"))
+        self.root.looped_node.add_child(SequenceNode("Sequence1"))
+        self.root.looped_node.add_child(SequenceNode("Sequence2"))
+        self.root.looped_node.add_child(SequenceNode("Sequence3"))
+        self.root.looped_node.add_child(GatherFood())
+        self.root.looped_node.children[0].add_child(CheckTorchEquipped())
+        self.root.looped_node.children[0].add_child(IsDayTime())
+        self.root.looped_node.children[0].add_child(UnequipTorch())
+        self.root.looped_node.children[1].add_child(NegateNode(CheckEnoughGrassTwigs()))
+        self.root.looped_node.children[1].add_child(GatherGrassTwigs())
+        self.root.looped_node.children[2].add_child(NegateNode(CheckTorch()))
+        self.root.looped_node.children[2].add_child(CraftTorch())
 
 
 class CheckEnoughGrassTwigs(LeafNode):
@@ -363,7 +382,9 @@ class UnequipTorch(LeafNode):
         action_requester.set_action(("unequip", "Hand"))
 
     def execute(self, modeling, action_requester):
-        if modeling.clock.time() - self.start_time >= 60:
+        if modeling.player_model.inventory.get_inventory_slots()["Hand"].object is not None:
+            return ExecutionStatus.RUNNING
+        elif modeling.clock.time() - self.start_time >= 60:
             return ExecutionStatus.FAILURE
         else:
             return ExecutionStatus.SUCCESS

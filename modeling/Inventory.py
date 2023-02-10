@@ -83,7 +83,7 @@ class Inventory:
                 return i
         return None
 
-    def _find_first_slot(self, name : str) -> int:
+    def find_first_slot(self, name : str) -> int:
         """Find first slot that has the requested item
 
         :param item_name: item name
@@ -107,17 +107,24 @@ class Inventory:
         """
         return self.slots[slot_name]
 
-    # as in picking up an item, returns false if item doesn't fit (there's
-    # something on cursor after picking it up)
-    def add_item(self, name : str, count : int) -> bool:
+    def replace_inventory(self, slots_dict : dict[int | str, tuple[str, int]]) -> None:
+        """Replace the specified inventory slots
+
+        :param slots_dict: each key should be either a number from 0-14 or "Head", "Body", "Hand", value should be (name, count)
+        :type slots_dict: dict[int | str, tuple[str, int]]
+        """
+        for slot_name, item_info in slots_dict.items():
+            item_name, count = item_info
+            obj_id = objects_info.get_item_info(info="obj_id", name=item_name)
+            self.slots[slot_name].change_item(obj_id, count)
+
+    def add_item(self, name : str, count : int) -> None:
         """Add item to inventory, as if picking it up
 
         :param name: item name
         :type name: str
         :param count: item count
         :type count: int
-        :return: whether the item fits (False if the item doesn't fit in the inventory)
-        :rtype: bool
         """
         equip_slot = objects_info.get_item_info(info="equip_slot", name=name)
         if equip_slot is not None:
@@ -126,41 +133,41 @@ class Inventory:
             if equip_slot == "Head":
                 if self.slots["Head"].object is None:
                     self.slots["Head"].add_item(objects_info.get_item_info(info="obj_id", name=name), count)
-                    return True
+                    return
             elif equip_slot == "Body":
                 if self.slots["Body"].object is None:
                     self.slots["Body"].add_item(objects_info.get_item_info(info="obj_id", name=name), count)
-                    return True
+                    return
             else:
                 if self.slots["Hand"].object is None:
                     self.slots["Hand"].add_item(objects_info.get_item_info(info="obj_id", name=name), count)
-                    return True
+                    return
         # checking if there is a non full slot with this item
         first_non_full_slot = self._find_first_non_full_slot(name)
         if first_non_full_slot is None:
             # no items of this type or only full stacks
             first_empty_slot = self._find_first_empty_slot()
             if first_empty_slot is None:
-                return False
+                raise Exception("Wrong usage! The inventory is full!")
             else:
                 self.slots[first_empty_slot].add_item(
                     objects_info.get_item_info(info="obj_id", name=name), count)
-                return True
+                return
         else:
             # add item to existing stack and possibly fill new slot
             extra_count = self.slots[first_non_full_slot].count + count - objects_info.get_item_info(info="stack_size", name=name)
             self.slots[first_non_full_slot].add_item(
                 objects_info.get_item_info(info="obj_id", name=name), count)
             if extra_count <= 0:
-                return True
+                return
             # add any items that didn't fit in the first stack to a new slot
             first_empty_slot = self._find_first_empty_slot()
             if first_empty_slot is None:
-                return False
+                raise Exception("Wrong usage! The inventory is full!")
             else:
                 self.slots[first_empty_slot].add_item(
                     objects_info.get_item_info(info="obj_id", name=name), extra_count)
-                return True
+                return
 
     def can_add_item(self, name : str, count : int) -> bool:
         """Check whether the requested item fits
@@ -202,7 +209,7 @@ class Inventory:
         :rtype: bool
         """
         while count > 0:
-            first_slot = self._find_first_slot(name)
+            first_slot = self.find_first_slot(name)
             if first_slot is None:
                 return False
             if count < self.slots[first_slot].count:
@@ -213,8 +220,6 @@ class Inventory:
                 self.slots[first_slot].reset()
         return True
 
-    # similar to consume_item, but can be reversed with
-    # revert_simulation and must be finished with finish_simulation
     def simulate_consume_item(self, name : str, count : int) -> bool:
         """Similar to consume_item, but can be reversed with revert_simulation and must be finished with finish_simulation
 
@@ -226,7 +231,7 @@ class Inventory:
         :rtype: bool
         """
         while count > 0:
-            first_slot = self._find_first_slot(name)
+            first_slot = self.find_first_slot(name)
             if first_slot is None:
                 return False
             if count < self.slots[first_slot].count:
@@ -252,13 +257,11 @@ class Inventory:
         """
         self._list_of_changes = []
 
-    def craft(self, name : str) -> bool:
+    def craft(self, name : str) -> None:
         """Craft item
 
         :param name: name of the item to be crafted
         :type name: str
-        :return: whether it was possible, False if there aren't enough materials or space
-        :rtype: bool
         """
         if len(self._list_of_changes) > 0:
             raise Exception("New simulation without clearing the past one up!")
@@ -267,14 +270,13 @@ class Inventory:
             if not self.simulate_consume_item(
                     objects_info.get_item_info(info="name", obj_id=obj_id), count):
                 self.revert_simulation()
-                return False
+                raise Exception("Can't craft, not enough materials!")
         if self.can_add_item(name, 1):
             self.finish_simulation()
             self.add_item(name, 1)
-            return True
         else:
             self.revert_simulation()
-            return False
+            raise Exception("Can't craft, not enough inventory space!")
 
     def can_craft(self, name : str) -> bool:
         """Check if we can craft some item
@@ -329,44 +331,41 @@ class Inventory:
                 self.hand_return_to = self.slots[self._find_first_empty_slot()]
             self.hand_return_to.trade_slot(self.slots["Hand"])
         
-    def trade_slots(self, slot_name_1 : str | int, slot_name_2 : str | int) -> None:
+    def trade_slots(self, slot1 : InventorySlot, slot2 : InventorySlot) -> None:
         """Trade slot contents
 
-        :param slot_name_1: 0-14, "Head", "Body" or "Hand"
-        :type slot_name_1: str | int
-        :param slot_name_2: 0-14, "Head", "Body" or "Hand"
-        :type slot_name_2: str | int
+        :param slot_name_1: inventory slot
+        :type slot_name_1: InventorySlot
+        :param slot_name_2: inventory slot
+        :type slot_name_2: InventorySlot
         """
-        slot1 = self._get_slot(slot_name_1)
-        slot2 = self._get_slot(slot_name_2)
-        if slot1.position in ["Head", "Body", "Hand"] or slot2.position in ["Head", "Body", "Hand"]:
-            self.trade_with_equip_slot(slot1, slot2)
+        if slot1.position in ["Head", "Body", "Hand"]:
+            self._trade_with_equip_slot(slot1, slot2)
+        elif slot2.position in ["Head", "Body", "Hand"]:
+            self._trade_with_equip_slot(slot2, slot1)
         else:
             slot1.trade_slot(slot2)
 
-    def trade_with_equip_slot(self, slot1 : InventorySlot, slot2 : InventorySlot) -> None:
+    def _trade_with_equip_slot(self, equip_slot : InventorySlot, other_slot : InventorySlot) -> None:
         """Trade with equip slot
 
-        :param slot1: inventory slot
-        :type slot1: InventorySlot
-        :param slot2: inventory slot
-        :type slot2: InventorySlot
+        :param equip_slot: inventory slot corresponding to "Head", "Body" or "Hand"
+        :type equip_slot: InventorySlot
+        :param other_slot: inventory slot corresponding to 0-14 slots
+        :type other_slot: InventorySlot
         """
-        if slot2.get_slot_info() is not None:
-            if slot1.position == "Head":
-                self.head_return_to = slot2
-            if slot1.position == "Body":
-                self.body_return_to = slot2
-            if slot1.position == "Hand":
-                self.hand_return_to = slot2
-        if slot1.get_slot_info() is not None:
-            if slot2.position == "Head":
-                self.head_return_to = slot1
-            if slot2.position == "Body":
-                self.body_return_to = slot1
-            if slot2.position == "Hand":
-                self.hand_return_to = slot1
-        slot1.trade_slot(slot2)
+        if equip_slot.position not in ["Head", "Body", "Hand"]:
+            raise ValueError("equip_slot is not an equipment slot!")
+        if other_slot.position not in ["Head", "Body", "Hand"]:
+            raise ValueError("other_slot is an equipment slot!")
+        if other_slot.get_slot_info() is not None:
+            if equip_slot.position == "Head":
+                self.head_return_to = other_slot
+            if equip_slot.position == "Body":
+                self.body_return_to = other_slot
+            if equip_slot.position == "Hand":
+                self.hand_return_to = other_slot
+        equip_slot.trade_slot(other_slot)
 
     # equipping in either head, body or hand slot
     # when unequipping, the unequipped item tries to return to the position it was before
@@ -379,7 +378,7 @@ class Inventory:
         """
         if objects_info.get_item_info(info="equip_slot", name=name) is None:
             raise ValueError("Item is not equippable")
-        item_slot = self._find_first_slot(name)
+        item_slot = self.find_first_slot(name)
         if item_slot is None:
             raise ValueError("Can't equip item that's not in the inventory")
         item_slot = self.slots[item_slot]
@@ -388,7 +387,7 @@ class Inventory:
         # prev_equip is the equipment previously equipped
         prev_equip = equip_slot.get_slot_info()
         if prev_equip is None:
-            self.trade_with_equip_slot(item_slot, equip_slot)
+            self.trade_slots(item_slot, equip_slot)
         else:
             obj, count = item_slot.get_slot_info()
             item_slot.reset()
@@ -426,7 +425,7 @@ class Inventory:
                         if slot.object.spoilage <= GameTime(seconds=0):
                             slot.object.rot()
             # if the slot is a equipment slot
-            else: # type(slot_name) == str
+            elif type(slot_name) == str:
                 if slot.object is not None:
                     if (objects_info.get_item_info(info="use_time",
                                                 obj_id=slot.object.id) is not None):
@@ -436,7 +435,9 @@ class Inventory:
                             slot.no_durability()
                             # try to replace the item if it was consumed
                             if slot.object is None:
-                                first_slot = self._find_first_slot(
+                                first_slot = self.find_first_slot(
                                     objects_info.get_item_info(info="name", obj_id=equip_id))
                                 if first_slot is not None:
-                                    self.trade_with_equip_slot(self.slots[first_slot], slot)
+                                    self.trade_slots(self.slots[first_slot], slot)
+            else:
+                raise Exception("Invalid slot name!")

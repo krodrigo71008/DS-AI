@@ -149,8 +149,9 @@ class Control:
                     self.start_time = self.clock.time()
                 else:
                     raise ValueError("Invalid secondary action!")
+            self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
+                                 self.current_action, self.clock.time_in_seconds, self.update_at_end))
         if self.debug:
-            self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, self.current_action, self.pick_up_state))
             if self.queue is not None:
                 if self.current_action == "go_to" or self.current_action == "explore":
                     self.queue.put(("current_action", (self.current_action, self.objective)))
@@ -297,7 +298,8 @@ class Control:
             self.update_at_end = None
             return return_value
         if self.debug:
-            self.records.append(("continue_path", self.key_action, self.mouse_action, self.action_on_cooldown, self.current_action, self.pick_up_state))
+            self.records.append(("continue_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
+                                 self.current_action, self.clock.time_in_seconds, self.update_at_end))
         return False
 
     def eat(self, food_name: str, modeling: Modeling):
@@ -318,18 +320,13 @@ class Control:
     def equip(self, equip_name: str, modeling: Modeling):
         # calculate where I should click
         inv = modeling.player_model.inventory
-        slots_1 = [slot_name for slot_name in inv.get_inventory_slots()]
-        slots_2 = [slot.object.name if slot.object is not None else None for slot in inv.get_inventory_slots().values()]
-        for elem in zip(slots_1, slots_2):
-            # elem is (slot_number, slot_object_name)
-            if elem[1] == equip_name and type(elem[0]) == int:
-                INV_SLOT_1_POS = Point2d(FIRST_INVENTORY_POSITION[0], FIRST_INVENTORY_POSITION[1])
-                INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
-                self.mouse_action = ("right_click", INV_SLOT_1_POS+INV_SLOT_DELTA*elem[0])
-                self.key_action = None
-                self.update_at_end = ("equip", equip_name)
-                return
-
+        slot_index = inv.find_first_slot(equip_name)
+        INV_SLOT_1_POS = Point2d(FIRST_INVENTORY_POSITION[0], FIRST_INVENTORY_POSITION[1])
+        INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
+        self.mouse_action = ("right_click", INV_SLOT_1_POS+INV_SLOT_DELTA*slot_index)
+        self.key_action = None
+        self.update_at_end = ("equip", equip_name)
+        
     def unequip(self, equip_slot: str):
         slot_name_to_number = {
             "Hand": 0,
