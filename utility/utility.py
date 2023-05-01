@@ -24,7 +24,7 @@ def clamp2pi(angle: float) -> float:
     return angle
 
 def hide_huds(image : Image) -> Image:
-    """_summary_
+    """Hides huds like inventory, crafting menu, health, sanity, hunger
 
     :param image: input image
     :type image: Image
@@ -39,7 +39,7 @@ def hide_huds(image : Image) -> Image:
     return image
 
 def hide_huds_and_player(image : Image) -> Image:
-    """_summary_
+    """Hides huds like inventory, crafting menu, health, sanity, hunger and the player
 
     :param image: input image
     :type image: Image
@@ -47,6 +47,21 @@ def hide_huds_and_player(image : Image) -> Image:
     :rtype: Image
     """
     limits = [(0, 190, 65, 890), (420, 1010, 1500, 1080), (850, 410, 1065, 665), (1680, 0, 1920, 290), (1780, 950, 1920, 1080)]
+    draw = ImageDraw.Draw(image)
+    for limit in limits:
+        draw.rectangle(limit, fill=0)
+    del draw
+    return image
+
+def hide_player(image : Image) -> Image:
+    """Hides player
+
+    :param image: input image
+    :type image: Image
+    :return: output image
+    :rtype: Image
+    """
+    limits = [(850, 410, 1065, 665)]
     draw = ImageDraw.Draw(image)
     for limit in limits:
         draw.rectangle(limit, fill=0)
@@ -199,12 +214,12 @@ def draw_annotations(image : np.array, classes : list[int], scores : list[float]
     image_result = np.copy(image)
     results = []
     for class_id, score, box in zip(classes, scores, boxes):
-        results.append('%s %f %f %f %f %f\n' % (class_names[class_id], score, box[0], box[1], box[0] + box[2],
-                                                     box[1] + box[3]))
+        results.append('%s %f %f %f %f %f\n' % (class_names[class_id], score, box[0] - box[2]//2, box[1] - box[3]//2, 
+                                                box[0] + box[2]//2, box[1] + box[3]//2))
         
         label = "%s: %f" % (class_names[class_id], score)
-        cv2.rectangle(image_result, box, color, 2)
-        cv2.putText(image_result, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        cv2.rectangle(image_result, (box[0] - box[2]//2, box[1] - box[3]//2, box[2], box[3]), color, 2)
+        cv2.putText(image_result, label, (box[0] - box[2]//2, box[1] - box[3]//2 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
     
     return image_result, results
     

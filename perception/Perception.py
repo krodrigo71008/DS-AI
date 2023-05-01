@@ -1,10 +1,10 @@
 import mss
 import numpy as np
-import cv2
 from PIL import Image
+from ultralytics import YOLO
 
 from perception.ImageObject import ImageObject
-from perception.screen import SCREEN_SIZE, SCREEN_POS
+from perception.constants import SCREEN_SIZE, SCREEN_POS
 from perception.YoloIdConverter import yolo_id_converter
 from utility.utility import hide_huds, draw_annotations
 
@@ -14,15 +14,11 @@ mon = {"top": SCREEN_POS["top"], "left": SCREEN_POS["left"],
 
 class Perception:
     def __init__(self, debug=False, queue=None):
-        with open("perception/darknet/obj.names", "r") as f:
-            self.class_names = [cname.strip() for cname in f.readlines()]
-        self.CONFIDENCE_THRESHOLD = 0.9
-        self.NMS_THRESHOLD = 0.45
-        net = cv2.dnn.readNet("perception/darknet/yolov4-tiny-custom_final.weights", "perception/darknet/yolov4-tiny-custom.cfg")
-        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT)
-        net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-        self.model = cv2.dnn_DetectionModel(net)
-        self.model.setInputParams(size=(416, 416), scale=1 / 255)
+        self.model = YOLO("perception/darknet/best.pt")
+        self.CONFIDENCE_THRESHOLD = .5
+        self.NMS_THRESHOLD = .7
+        # net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+        # net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
         self.sct = mss.mss()
         self.objects = []
         self.debug = debug
@@ -30,14 +26,18 @@ class Perception:
             self.queue = queue
 
     def get_screenshot(self):
-        img = np.asarray(self.sct.grab(mon))
+        img = np.asarray(self.sct.grab(mon)) # this is in BGRA
         no_alpha_img = img[:, :, :3]
-        no_alpha_img = no_alpha_img[:, :, ::-1]
-        return no_alpha_img
+        # no_alpha_img = no_alpha_img[:, :, ::-1]
+        return no_alpha_img # this is in RGB
 
     def process_frame(self, frame : np.array):
         # box is (x, y, l, h)
-        classes, scores, boxes = self.model.detect(frame, self.CONFIDENCE_THRESHOLD, self.NMS_THRESHOLD)
+        result = self.model.predict(frame, conf=self.CONFIDENCE_THRESHOLD, iou=self.NMS_THRESHOLD)[0].boxes
+        classes = [int(res.cls) for res in result]
+        scores = [res.conf.item() for res in result]
+        boxes = [res.xywh.cpu().numpy().astype(int)[0] for res in result]
+            
         return classes, scores, boxes
 
     def perceive(self, frame : np.array = None):

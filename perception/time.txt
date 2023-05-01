@@ -1,5 +1,5 @@
-time begin (s): 1666482676.181762
-time end (s): 1666482682.899323
-time diff (s): 6.717562
-time per image (s): 0.062781
-fps: 15.928398
+time begin (s): 1680264891.828425
+time end (s): 1680264896.032419
+time diff (s): 4.203994
+time per image (s): 0.039290
+fps: 25.451990

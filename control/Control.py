@@ -90,65 +90,41 @@ class Control:
                 if secondary_action[0] == "eat":
                     # this is a one step action
                     self.eat(secondary_action[1], modeling)
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 elif secondary_action[0] == "craft":
                     # this is a multiple step action
                     # one step is one key press
                     self.craft(secondary_action[1])
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 elif secondary_action[0] == "go_to":
                     # this is a multiple step process
                     # one step is walking for a bit
                     self.go_towards(secondary_action[1], modeling)
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 elif secondary_action[0] == "go_precisely_to":
                     # this is a multiple step process
                     # one step is walking for a bit
                     self.go_precisely_towards(secondary_action[1], modeling)
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 elif secondary_action[0] == "run":
                     # this is a multiple step process
                     # one step is walking for a bit
                     self.run(secondary_action[1])
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 elif secondary_action[0] == "explore":
                     # this is a multiple step process
                     # one step is walking for a bit
                     self.explore(modeling)
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 elif secondary_action[0] == "pick_up_item":
                     # this is a multiple step process
                     # steps are: waiting, hovering, clicking
                     self.pick_up(secondary_action[1], modeling)
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 elif secondary_action[0] == "equip":
                     # this is a one step process
                     self.equip(secondary_action[1], modeling)
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 elif secondary_action[0] == "unequip":
                     # this is a one step process
                     self.unequip(secondary_action[1])
-                    self.current_action = secondary_action[0]
-                    self.action_in_progress = True
-                    self.start_time = self.clock.time()
                 else:
                     raise ValueError("Invalid secondary action!")
+                self.current_action = secondary_action[0]
+                self.action_in_progress = True
+                self.start_time = self.clock.time()
             self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
                                  self.current_action, self.clock.time_in_seconds, self.update_at_end))
         if self.debug:
@@ -461,19 +437,19 @@ class Control:
         elif self.pick_up_state == "hover":
             bbox = obj.latest_screen_position
             self.key_action = None
-            self.mouse_action = ("move", Point2d(bbox[0] + bbox[2]//2, bbox[1] + bbox[3]//2))
+            self.mouse_action = ("move", Point2d.from_box_center(bbox))
             self.update_at_end = ("change_pick_up_state", "click")
             # send notice that we're hovering over obj
             modeling.world_model.set_hovering_over(obj)
         elif self.pick_up_state == "click":
             bbox = obj.latest_screen_position
             self.key_action = None
-            self.mouse_action = ("click", Point2d(bbox[0] + bbox[2]//2, bbox[1] + bbox[3]//2))
+            self.mouse_action = ("click", Point2d.from_box_center(bbox))
             player_pos = modeling.player_model.position
             distance_to_object : Point2d = obj.position - player_pos
             modeling.player_model.set_direction(distance_to_object.angle())
             self.update_at_end = ("pick_up", obj)
             # this is the estimated time that we'll take to get to obj
-            self.estimated_time_for_objective = distance_to_object.distance(Point2d(0, 0))/PLAYER_BASE_SPEED  
+            self.estimated_time_for_objective = distance_to_object.distance(Point2d(0, 0))/PLAYER_BASE_SPEED
             # send notice that we're no longer hovering over obj
-            modeling.world_model.set_hovering_over(None)          
+            modeling.world_model.set_hovering_over(None)

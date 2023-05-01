@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image, ImageEnhance
 
 from perception.YoloIdConverter import yolo_id_converter
-from perception.screen import SCREEN_SIZE
+from perception.constants import SCREEN_SIZE
 
 def choose_random_in_array(arr : list):
     num = randint(0, len(arr)-1)
@@ -142,7 +142,7 @@ def paste_object_into_image(image_id : int, image : Image.Image,
     return bb_list
 
 def generate_image(important_obj_list: list[int],
-            not_important_obj_list: list[int], obj_info: pd.DataFrame, img_name: str) -> None:
+            not_important_obj_list: list[int], obj_info: pd.DataFrame, subset: str, img_name: str) -> None:
     """Generates an image with obj_count objects
 
     :param important_obj_list: list with objects (that should be annotated) to put in the image
@@ -151,6 +151,8 @@ def generate_image(important_obj_list: list[int],
     :type not_important_obj_list: list[int]
     :param obj_info: dataframe with some info about the objects
     :type obj_info: pd.DataFrame
+    :param subset: image subset, either "train", "val" or "test"
+    :type subset: str
     :param img_name: name of the output file
     :type img_name: str
     """
@@ -187,9 +189,9 @@ def generate_image(important_obj_list: list[int],
             positions.append(((bb_final[0]+bb_final[2])//2, (bb_final[1]+bb_final[3])//2, bb_final[2]-bb_final[0], bb_final[3]-bb_final[1]))
         
         # resizing to reduce size in disk
-        image = image.resize((image.size[0]//2, image.size[1]//2))
-        image.save(f"perception/generated_images/{img_name}")
-        with open(f"perception/generated_images/{img_name.split('.')[0]}.txt", "w") as text_file:
+        image = image.resize((640, 640))
+        image.save(f"perception/generated_images/{subset}/images/{img_name}")
+        with open(f"perception/generated_images/{subset}/labels/{img_name.split('.')[0]}.txt", "w") as text_file:
             for obj_id, p in zip(important_obj_list, positions):
                 image_id = yolo_id_converter.actual_to_yolo_id(obj_id)
                 assert p[0]/SCREEN_SIZE['width'] >= 0 and p[0]/SCREEN_SIZE['width'] <= 1

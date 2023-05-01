@@ -14,7 +14,7 @@ predictions_dir = 'perception/predictions'
 
 perception = Perception()
 
-NUM_IMAGES = 107
+NUM_IMAGES = 10
 
 
 if not os.path.exists(text_logs_dir):
@@ -45,7 +45,7 @@ classes_list = []
 scores_list = []
 boxes_list = []
 time_begin = time.time()
-count = 0
+count = 1
 for filename in filenames:
     if count > NUM_IMAGES:
         break
@@ -75,7 +75,7 @@ time_file.write('fps: %f\n' % fps)
 
 
 
-count = 0
+count = 1
 for filename, classes, scores, boxes in zip(filenames, classes_list, scores_list, boxes_list):
     if count > NUM_IMAGES:
         break

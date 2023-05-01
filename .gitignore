@@ -9,6 +9,7 @@ __pycache__/
 perception/darknet/*.weights
 perception/bg_images/
 perception/images/
+perception/train_images/
 perception/ds_sprites/
 perception/generated_images/
 perception/predictions/
@@ -16,6 +17,7 @@ perception/processed_bg_images/
 perception/test_results/
 perception/text_logs/
 perception/yolo_test_results/
+perception/yolov8/
 
 # Local History for Visual Studio Code
 .history/
@@ -28,3 +30,4 @@ test.py
 *.png
 *.jpg
 *.zip
+*.pt

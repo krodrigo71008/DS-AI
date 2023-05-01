@@ -13,15 +13,15 @@ from utility.DebugScreen import DebugScreen
 
 
 def main(q=None):
-    # press p to start the AI
-    while not keyboard.is_pressed("p"):
-        pass
     tr = TimeRecorder("results", ["perception", "modeling", "decision making", "control", "action"])
     action = Action()
     control = Control(debug=q is not None, queue=q)
     decision_making = DecisionMaking(debug=q is not None, queue=q)
     modeling = Modeling(debug=q is not None, queue=q)
     perception = Perception(debug=q is not None, queue=q)
+    # press p to start the AI
+    while not keyboard.is_pressed("p"):
+        pass
     time.sleep(0.1)
     # press p again to end the program
     while not keyboard.is_pressed("p"):

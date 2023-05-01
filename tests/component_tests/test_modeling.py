@@ -10,7 +10,7 @@ from modeling.Modeling import Modeling
 from modeling.PlayerModel import PlayerModel
 from modeling.WorldModel import WorldModel
 from modeling.constants import CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV, DISTANCE_FOR_SAME_OBJECT, CHUNK_SIZE
-from perception.screen import SCREEN_SIZE
+from perception.constants import SCREEN_SIZE
 from perception.YoloIdConverter import yolo_id_converter
 from utility.Clock import Clock
 from utility.Point2d import Point2d

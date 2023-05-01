@@ -11,7 +11,7 @@ from modeling.Factory import factory
 from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_FOR_OBJECT_REMOVAL, CYCLES_TO_ADMIT_OBJECT
 from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING, CHUNK_SIZE, DISTANCE_FOR_VALID_PLAYER_POSITION
 from modeling.ObjectsInfo import objects_info
-from perception.screen import SCREEN_SIZE
+from perception.constants import SCREEN_SIZE
 from utility.Clock import Clock
 from utility.Point2d import Point2d
 from utility.utility import is_inside_convex_polygon
@@ -288,7 +288,7 @@ class WorldModel:
     def object_detected(self, image_obj : ImageObject) -> None:
         # anchor points are usually at the bottom (y) and middle (x)
         pos = self.local_to_global_position(
-            Point2d.from_box(image_obj.box),
+            Point2d.from_box_bottom(image_obj.box),
             CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
         obj_name = objects_info.get_item_info(info="name", image_id=image_obj.id)
         required_chunks = [self.point_to_chunk_index(pos)]

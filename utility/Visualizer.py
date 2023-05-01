@@ -3,7 +3,7 @@ from PIL import Image, ImageFont, ImageDraw
 from modeling.Modeling import Modeling
 from modeling.PlayerModel import PlayerModel
 
-from perception.screen import SCREEN_SIZE
+from perception.constants import SCREEN_SIZE
 from modeling.constants import CHUNK_SIZE, DISTANCE_FOR_SAME_OBJECT
 from utility.Point2d import Point2d
 from utility.utility import draw_annotations, get_multiples_in_range

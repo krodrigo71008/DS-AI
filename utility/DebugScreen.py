@@ -4,7 +4,7 @@ import queue
 
 from PIL import Image, ImageTk
 
-from perception.screen import SCREEN_SIZE
+from perception.constants import SCREEN_SIZE
 from modeling.constants import CHUNK_SIZE
 from modeling.ObjectsInfo import objects_info
 from utility.utility import get_multiples_in_range
@@ -84,7 +84,8 @@ class DebugScreen:
             #         if objects_info.get_item_info(info="name", image_id=item.id) == "Sapling":
             #             self.draw_shape(item.box[0], item.box[1], "square", "local")
             elif info[0] == "detected_objects":
-                img = Image.fromarray(info[1])
+                tuple_image = info[1][:, :, ::-1] # yolo seems to detect objects better in bgr?? so I'm converting it back to rgb here
+                img = Image.fromarray(tuple_image)
                 img = img.resize((SCREEN_SIZE["width"]//3, SCREEN_SIZE["height"]//3))
                 tk_image = ImageTk.PhotoImage(img)
                 self.perception_label.configure(image=tk_image)
