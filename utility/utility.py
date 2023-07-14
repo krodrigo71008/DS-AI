@@ -194,7 +194,8 @@ def get_multiples_in_range(number : int, range_ : tuple[int, int]) -> list[int]:
         aux_ += number
     return ans
 
-def draw_annotations(image : np.array, classes : list[int], scores : list[float], boxes : list[list[int]]) -> tuple[np.array, list[str]]:
+def draw_annotations(image : np.array, classes : list[int], scores : list[float], 
+                     boxes : list[list[int]], colors : list[tuple[int]] = [], positions : list[str] = []) -> tuple[np.array, list[str]]:
     """Draws (into image) annotations described by classes, scores and boxes
 
     :param image: image to be modified
@@ -205,21 +206,63 @@ def draw_annotations(image : np.array, classes : list[int], scores : list[float]
     :type scores: list[float]
     :param boxes: bounding boxes for each object
     :type boxes: list[list[int]]
+    :param colors: color for each bounding box
+    :type colors: list[tuple[int]]
+    :param positions: label position, either "up" or "down"
+    :type positions: list[str]
     :return: resulting image and list of strings with information for each object
     :rtype: tuple[np.array, list[str]]
     """
     class_names = get_class_names()
-    color = (255, 0, 0)
+    if len(colors) == 0:
+        colors = [(255, 0, 0)]*len(classes)
+    if len(positions) == 0:
+        positions = ["up"]*len(classes)
 
     image_result = np.copy(image)
     results = []
-    for class_id, score, box in zip(classes, scores, boxes):
+    for class_id, score, box, color, position in zip(classes, scores, boxes, colors, positions):
         results.append('%s %f %f %f %f %f\n' % (class_names[class_id], score, box[0] - box[2]//2, box[1] - box[3]//2, 
                                                 box[0] + box[2]//2, box[1] + box[3]//2))
         
         label = "%s: %f" % (class_names[class_id], score)
         cv2.rectangle(image_result, (box[0] - box[2]//2, box[1] - box[3]//2, box[2], box[3]), color, 2)
-        cv2.putText(image_result, label, (box[0] - box[2]//2, box[1] - box[3]//2 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        if position == "up":
+            cv2.putText(image_result, label, (box[0] - box[2]//2, box[1] - box[3]//2 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        elif position == "down":
+            cv2.putText(image_result, label, (box[0] - box[2]//2, box[1] + box[3]//2 + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        else:
+            raise ValueError("Invalid argument 'position'!")
     
     return image_result, results
     
+def iou(bb1 : tuple[float], bb2: tuple[float]) -> float:
+    """Returns IoU of two bounding boxes
+
+    :param bb1: bounding box 1 in the form (x, y, w, h) with x and y being the center coordinates
+    :type bb1: tuple[float]
+    :param bb2: bounding box 2 in the form (x, y, w, h) with x and y being the center coordinates
+    :type bb2: tuple[float]
+    :return: iou value
+    :rtype: float
+    """
+    bb1_aux = (bb1[0] - bb1[2]/2, bb1[1] - bb1[3]/2, bb1[0] + bb1[2]/2, bb1[1] + bb1[3]/2)
+    bb2_aux = (bb2[0] - bb2[2]/2, bb2[1] - bb2[3]/2, bb2[0] + bb2[2]/2, bb2[1] + bb2[3]/2)
+
+    x_a = max(bb1_aux[0], bb2_aux[0])
+    y_a = max(bb1_aux[1], bb2_aux[1])
+    x_b = min(bb1_aux[2], bb2_aux[2])
+    y_b = min(bb1_aux[3], bb2_aux[3])
+    
+    # no intersection in these cases
+    if x_b <= x_a or y_b <= y_a:
+        return 0
+
+    intersection = (x_b - x_a)*(y_b - y_a)
+
+    area1 = (bb1_aux[2] - bb1_aux[0])*(bb1_aux[3] - bb1_aux[1])
+    area2 = (bb2_aux[2] - bb2_aux[0])*(bb2_aux[3] - bb2_aux[1])
+
+    union = area1 + area2 - intersection + 1e-6
+
+    return intersection/union

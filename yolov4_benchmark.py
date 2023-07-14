@@ -8,13 +8,13 @@ from utility.utility import draw_annotations
 
 # images_dir = '../darknet-master/data/obj'
 # images_dir = 'augmentation'
-images_dir = 'perception/images'
+images_dir = 'perception/train_images/test/images'
 text_logs_dir = 'perception/text_logs'
 predictions_dir = 'perception/predictions'
 
 perception = Perception()
 
-NUM_IMAGES = 10
+NUM_IMAGES = 124
 
 
 if not os.path.exists(text_logs_dir):

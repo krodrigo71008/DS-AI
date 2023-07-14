@@ -7,7 +7,9 @@ import os
 
 from PIL import Image
 
-from perception.constants import TRAIN, VAL, TEST
+TRAIN = 60
+VAL = 20
+TEST = 20
 
 gen_path = Path("perception/generated_images/")
 train_path = Path("perception/train_images/")

@@ -288,7 +288,7 @@ class WorldModel:
     def object_detected(self, image_obj : ImageObject) -> None:
         # anchor points are usually at the bottom (y) and middle (x)
         pos = self.local_to_global_position(
-            Point2d.from_box_bottom(image_obj.box),
+            Point2d.bottom_from_box(image_obj.box),
             CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
         obj_name = objects_info.get_item_info(info="name", image_id=image_obj.id)
         required_chunks = [self.point_to_chunk_index(pos)]

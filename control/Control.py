@@ -125,8 +125,6 @@ class Control:
                 self.current_action = secondary_action[0]
                 self.action_in_progress = True
                 self.start_time = self.clock.time()
-            self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
-                                 self.current_action, self.clock.time_in_seconds, self.update_at_end))
         if self.debug:
             if self.queue is not None:
                 if self.current_action == "go_to" or self.current_action == "explore":
@@ -135,6 +133,8 @@ class Control:
                     self.queue.put(("current_action", self.current_action))
                 self.queue.put(("key_action", self.key_action))
                 self.queue.put(("mouse_action", self.mouse_action))
+            self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
+                                 self.current_action, self.clock.time_in_seconds, self.update_at_end))
 
     def continue_action(self, modeling: Modeling) -> bool:
         """Continues an ongoing action and returns whether the rest of the control should run this iteration
@@ -437,14 +437,14 @@ class Control:
         elif self.pick_up_state == "hover":
             bbox = obj.latest_screen_position
             self.key_action = None
-            self.mouse_action = ("move", Point2d.from_box_center(bbox))
+            self.mouse_action = ("move", Point2d.center_from_box(bbox))
             self.update_at_end = ("change_pick_up_state", "click")
             # send notice that we're hovering over obj
             modeling.world_model.set_hovering_over(obj)
         elif self.pick_up_state == "click":
             bbox = obj.latest_screen_position
             self.key_action = None
-            self.mouse_action = ("click", Point2d.from_box_center(bbox))
+            self.mouse_action = ("click", Point2d.center_from_box(bbox))
             player_pos = modeling.player_model.position
             distance_to_object : Point2d = obj.position - player_pos
             modeling.player_model.set_direction(distance_to_object.angle())

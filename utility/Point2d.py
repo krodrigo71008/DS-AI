@@ -7,11 +7,11 @@ class Point2d:
         self.x2 = x2
 
     @classmethod
-    def from_box_bottom(cls, box : tuple[int, int, int, int]):
+    def bottom_from_box(cls, box : tuple[int, int, int, int]):
         return cls(box[0], box[1]+box[3]//2)
 
     @classmethod
-    def from_box_center(cls, box : tuple[int, int, int, int]):
+    def center_from_box(cls, box : tuple[int, int, int, int]):
         return cls(box[0], box[1])
 
     def __add__(self, other):

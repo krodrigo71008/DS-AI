@@ -24,7 +24,7 @@ class Modeling:
         self.world_model.update()
         self.world_model.update_local(obj_list)
         self.player_model.update()
-        player_positions = [Point2d.from_box_bottom(obj.box) for obj in obj_list if objects_info.get_item_info(image_id=obj.id, info="object_type") == "PLAYER"]
+        player_positions = [Point2d.bottom_from_box(obj.box) for obj in obj_list if objects_info.get_item_info(image_id=obj.id, info="object_type") == "PLAYER"]
         # decide which of the detected player positions is the real one
         self.world_model.decide_player_position(player_positions)
         self.world_model.start_cycle(CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)

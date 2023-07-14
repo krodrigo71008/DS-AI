@@ -24,6 +24,10 @@ class Perception:
         self.debug = debug
         if self.debug:
             self.queue = queue
+        frame = self.get_screenshot()
+        frame = Image.fromarray(frame, mode="RGB")
+        frame = np.asarray(frame)
+        self.process_frame(frame)
 
     def get_screenshot(self):
         img = np.asarray(self.sct.grab(mon)) # this is in BGRA
