@@ -22,27 +22,25 @@ def generate_detections_all_models(folder_path : str) -> None:
     models = glob.glob("perception/darknet/models/*.pt")
     perception = Perception()
     class_names = get_class_names()
-    previous_detections = glob.glob("perception/test_results/**/*.txt", recursive=True)
-    for f in previous_detections:
-        os.remove(f)
     for model in models:
         model_name = Path(model).stem
         perception.model = YOLO(model)
         result_folder = "perception/test_results/" + model_name
+        # generate new detections only if the folder doesn't exist
         if not os.path.exists(result_folder):
             os.makedirs(result_folder)
-        for filename in tqdm.tqdm(filenames, desc=f"detections for {model_name}"):
-            frame = cv2.imread(filename)
-            # frame = frame[:, :, ::-1] # invert because opencv represents image in BGR, so we convert it to RGB
-            classes, scores, boxes = perception.process_frame(frame)
-            results = []
-            for class_id, score, box in zip(classes, scores, boxes):
-                results.append('%s %f %f %f %f %f\n' % (class_names[class_id], score, box[0] - box[2]//2, box[1] - box[3]//2, 
-                                                        box[0] + box[2]//2, box[1] + box[3]//2))
-            text_log_filename = Path(filename).stem + ".txt"
-            with open(f"{result_folder}/{text_log_filename}", "w") as results_file:
-                for result_str in results:
-                    results_file.write(result_str)
+            for filename in tqdm.tqdm(filenames, desc=f"detections for {model_name}"):
+                frame = cv2.imread(filename)
+                # frame = frame[:, :, ::-1] # invert because opencv represents image in BGR, so we convert it to RGB
+                classes, scores, boxes = perception.process_frame(frame)
+                results = []
+                for class_id, score, box in zip(classes, scores, boxes):
+                    results.append('%s %f %f %f %f %f\n' % (class_names[class_id], score, box[0] - box[2]//2, box[1] - box[3]//2, 
+                                                            box[0] + box[2]//2, box[1] + box[3]//2))
+                text_log_filename = Path(filename).stem + ".txt"
+                with open(f"{result_folder}/{text_log_filename}", "w") as results_file:
+                    for result_str in results:
+                        results_file.write(result_str)
 
 
 def annotate_image_folder(folder_path : str) -> None:

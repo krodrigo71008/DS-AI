@@ -4,7 +4,7 @@ import numpy as np
 
 from classes import get_class_names
 
-images_dir = "perception/generated_images"
+images_dir = "perception/train_images"
 image_filenames = glob.glob(images_dir + '/**/*.png', recursive=True)
 
 predictions_dir = "perception/yolo_mark_results"
@@ -20,6 +20,7 @@ for filename in image_filenames:
     height = frame.shape[0]
     text_filename = "".join(filename.split(".")[0:-1])
     text_filename += ".txt"
+    text_filename = text_filename.replace("\\images", "\\labels")
     with open(text_filename, "r") as annotations:
         lines = annotations.readlines()
         for line in lines:

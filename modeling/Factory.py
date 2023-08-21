@@ -9,7 +9,7 @@ from modeling.objects.SpiderNest import SpiderNest
 from modeling.objects.PickableObjectModel import PickableObjectModel
 from modeling.objects.BerryBush import BerryBush
 from modeling.objects.Campfire import Campfire
-from modeling.objects.Rock import Rock
+from modeling.objects.NitreRock import NitreRock
 from modeling.mobs.MobModel import MobModel
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
@@ -76,7 +76,7 @@ class Factory:
         if obj_id == 19:
             return PickableObjectModel(pos, latest_screen_position, obj_id, "Silk")
         if obj_id == 20:
-            return Rock(pos, latest_screen_position)
+            return NitreRock(pos, latest_screen_position)
         if obj_id == 21:
             return PickableObjectModel(pos, latest_screen_position, obj_id, "Meat")
         if obj_id == 22:

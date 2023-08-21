@@ -37,7 +37,7 @@ class Perception:
 
     def process_frame(self, frame : np.array):
         # box is (x, y, l, h)
-        result = self.model.predict(frame, conf=self.CONFIDENCE_THRESHOLD, iou=self.NMS_THRESHOLD)[0].boxes
+        result = self.model.predict(frame, conf=self.CONFIDENCE_THRESHOLD, iou=self.NMS_THRESHOLD, verbose=False)[0].boxes
         classes = [int(res.cls) for res in result]
         scores = [res.conf.item() for res in result]
         boxes = [res.xywh.cpu().numpy().astype(int)[0] for res in result]

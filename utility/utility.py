@@ -61,7 +61,7 @@ def hide_player(image : Image) -> Image:
     :return: output image
     :rtype: Image
     """
-    limits = [(850, 410, 1065, 665)]
+    limits = [(670, 280, 1195, 795)]
     draw = ImageDraw.Draw(image)
     for limit in limits:
         draw.rectangle(limit, fill=0)
