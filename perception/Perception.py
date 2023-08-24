@@ -6,7 +6,7 @@ from ultralytics import YOLO
 from perception.ImageObject import ImageObject
 from perception.constants import SCREEN_SIZE, SCREEN_POS
 from perception.YoloIdConverter import yolo_id_converter
-from utility.utility import hide_huds, draw_annotations
+from utility.utility import hide_huds_numpy, draw_annotations
 
 mon = {"top": SCREEN_POS["top"], "left": SCREEN_POS["left"],
        "width": SCREEN_SIZE["width"], "height": SCREEN_SIZE["height"]}
@@ -46,18 +46,16 @@ class Perception:
 
     def perceive(self, frame : np.array = None):
         if frame is None:
-            frame = self.get_screenshot()
-        frame = Image.fromarray(frame, mode="RGB")
-        frame = hide_huds(frame)
-        frame = np.asarray(frame)
-        classes, scores, boxes = self.process_frame(frame)
+            frame = self.get_screenshot() # takes like 30 ms avg
+        frame = hide_huds_numpy(frame)
+        classes, scores, boxes = self.process_frame(frame) # takes like 50 ms avg
         new_classes = [yolo_id_converter.yolo_to_actual_id(id_) for id_ in classes]
         objects = []
         for class_id, score, box in zip(new_classes, scores, boxes):
             obj = ImageObject(class_id, score, box)
             objects.append(obj)
         if self.debug:
-            self.queue.put(("detected_objects", draw_annotations(frame, classes, scores, boxes)[0]))
+            self.queue.put(("detected_objects", draw_annotations(frame, classes, scores, boxes)[0])) # takes like 20 ms avg
         return objects, classes, scores, boxes
 
 class PerceptionRecorder(Perception):

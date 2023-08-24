@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-import queue
+from multiprocessing import Queue
 
 from PIL import Image, ImageTk
 
@@ -24,7 +24,8 @@ class DebugScreen:
         self.window = tk.Tk()
         self.window.title("Debug screen")
         self.window.geometry("1000x500")
-        self.q = queue.Queue()
+        self.vision_debug_queue = Queue()
+        self.control_debug_queue = Queue()
         self.window.grid_columnconfigure(0, weight=1)
         self.window.grid_columnconfigure(1, weight=1)
         self.primary_action_label = ttk.Label(text="Primary action: -", font=("Arial", 30), wraplength=800, justify='center')
@@ -55,54 +56,53 @@ class DebugScreen:
         self.fov_corners : list[float] = []
     
     def update(self):
-        while not self.q.empty():
-            info = self.q.get_nowait()
-            if info[0] == "primary_action":
-                self.primary_action_label["text"] = "Primary action: " + str(info[1])
-            elif info[0] == "secondary_action":
-                self.secondary_action_label["text"] = f"Secondary action: {str(info[1][0])}, {str(info[1][1])}"
-            elif info[0] == "key_action":
-                self.key_label["text"] = "Key command: " + str(info[1])
-            elif info[0] == "mouse_action":
-                if info[1] is None:
-                    self.mouse_label["text"] = "Mouse command: " + str(info[1])
-                else:
-                    self.mouse_label["text"] = f"Mouse command: {str(info[1][0])}, {str(info[1][1])}"
-            elif info[0] == "current_action":
-                if info[1][0] == "go_to" or info[1][0] == "explore":
-                    self.objective = info[1][1]
-                    self.current_action_label["text"] = f"Current action: {str(info[1][0])}, {str(info[1][1])}"
-                else:
-                    self.current_action_label["text"] = "Current action: " + str(info[1])
-            # elif info[0] == "local_objects":
-            #     self.local_map.delete('all')
-            #     for item in info[1]:
-            #         if objects_info.get_item_info(info="name", image_id=item.id) == "Wilson":
-            #             self.draw_shape(item.box[0], item.box[1], "circle", "local")
-            #         if objects_info.get_item_info(info="name", image_id=item.id) == "Grass":
-            #             self.draw_shape(item.box[0], item.box[1], "triangle", "local")
-            #         if objects_info.get_item_info(info="name", image_id=item.id) == "Sapling":
-            #             self.draw_shape(item.box[0], item.box[1], "square", "local")
-            elif info[0] == "detected_objects":
-                tuple_image = info[1][:, :, ::-1] # yolo seems to detect objects better in bgr?? so I'm converting it back to rgb here
-                img = Image.fromarray(tuple_image)
-                img = img.resize((SCREEN_SIZE["width"]//3, SCREEN_SIZE["height"]//3))
-                tk_image = ImageTk.PhotoImage(img)
-                self.perception_label.configure(image=tk_image)
-                self.perception_label.image = tk_image
-            elif info[0] == "world_model_objects":
-                self.world_map.delete('all')
-                for name, object_list in info[1].items():
-                    if name == "Grass":
-                        for obj in object_list:
-                            self.world_objects.append(("Grass", obj.position))
-                    if name == "Sapling":
-                        for obj in object_list:
-                            self.world_objects.append(("Sapling", obj.position))
-            elif info[0] == "player":
-                self.player_position = info[1].position
-            elif info[0] == "fov_corners":
-                self.fov_corners = (info[1][0].x1, info[1][0].x2, info[1][1].x1, info[1][1].x2, info[1][2].x1, info[1][2].x2, info[1][3].x1, info[1][3].x2)
+        info = None
+        while not self.vision_debug_queue.empty():
+            info = self.vision_debug_queue.get_nowait()
+        # only use the most updated info
+        if info is not None and info[0] == "detected_objects":
+            tuple_image = info[1][:, :, ::-1] # yolo seems to detect objects better in bgr?? so I'm converting it back to rgb here
+            img = Image.fromarray(tuple_image)
+            img = img.resize((SCREEN_SIZE["width"]//3, SCREEN_SIZE["height"]//3))
+            tk_image = ImageTk.PhotoImage(img)
+            self.perception_label.configure(image=tk_image)
+            self.perception_label.image = tk_image
+        info = None
+        while not self.control_debug_queue.empty():
+            info = self.control_debug_queue.get_nowait()
+        # only use the most updated info
+        if info is not None and info[0] == "control_info":
+            _, q1, q2, q3 = info
+            world_model_objects, fov_corners, player_position = q1
+            primary_action, secondary_action = q2
+            current_action, key_action, mouse_action = q3
+            self.primary_action_label["text"] = "Primary action: " + str(primary_action)
+            self.secondary_action_label["text"] = f"Secondary action: {str(secondary_action[0])}, {str(secondary_action[1])}"
+            self.key_label["text"] = "Key command: " + str(key_action)
+            if mouse_action is None:
+                self.mouse_label["text"] = "Mouse command: " + str(mouse_action)
+            else:
+                self.mouse_label["text"] = f"Mouse command: {str(mouse_action[0])}, {str(mouse_action[1])}"
+            if current_action[0] == "go_to" or current_action[0] == "explore":
+                self.objective = current_action[1]
+                self.current_action_label["text"] = f"Current action: {str(current_action[0])}, {str(current_action[1])}"
+            else:
+                self.current_action_label["text"] = "Current action: " + str(current_action)
+            self.world_map.delete('all')
+            for name, pos_list in world_model_objects:
+                if name == "Grass":
+                    for pos in pos_list:
+                        self.world_objects.append(("Grass", pos))
+                if name == "Sapling":
+                    for pos in pos_list:
+                        self.world_objects.append(("Sapling", pos))
+            self.player_position = player_position
+            # this can be None if we don't know player_position
+            if fov_corners[0] is not None:
+                self.fov_corners = (fov_corners[0].x1, fov_corners[0].x2, 
+                                    fov_corners[1].x1, fov_corners[1].x2, 
+                                    fov_corners[2].x1, fov_corners[2].x2, 
+                                    fov_corners[3].x1, fov_corners[3].x2)
         if self.player_position is not None:
             x1_range = (self.player_position.x1 - self.CLOSE_OBJECTS_X1/2, self.player_position.x1 + self.CLOSE_OBJECTS_X1/2)
             x2_range = (self.player_position.x2 - self.CLOSE_OBJECTS_X2/2, self.player_position.x2 + self.CLOSE_OBJECTS_X2/2)
@@ -115,7 +115,8 @@ class DebugScreen:
             self.draw_shape(self.player_position.x1, self.player_position.x2, "circle", "global", x1_range, x2_range)
             if self.objective is not None:
                 self.draw_shape(self.objective.x1, self.objective.x2, "x", "global", x1_range, x2_range)
-            self.draw_fov(self.fov_corners, "global", x1_range, x2_range)
+            if len(self.fov_corners) > 0:
+                self.draw_fov(self.fov_corners, "global", x1_range, x2_range)
             self.draw_chunk_lines_world_canvas(CHUNK_SIZE, x1_range, x2_range)
             self.player_position = None
             self.objective = None

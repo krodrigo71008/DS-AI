@@ -12,7 +12,7 @@ import numpy as np
 
 
 class DecisionMaking:
-    def __init__(self, debug=False, queue=None):
+    def __init__(self, debug=False):
         self.primary_action = None
         self.secondary_action = None
         self.action_requester = ActionRequester()
@@ -20,7 +20,6 @@ class DecisionMaking:
         self.debug : bool = debug
         if self.debug:
             self.records = []
-            self.queue = queue
 
     # decides the action (high level)
     # should be called every loop
@@ -176,6 +175,5 @@ class DecisionMaking:
         self.inventory_management_system(modeling)
         self.emergency_system(modeling)
         if self.debug:
-            self.queue.put(("primary_action", self.primary_action))
-            self.queue.put(("secondary_action", self.secondary_action))
             self.records.append((self.primary_action, self.textify(self.secondary_action)))
+            return (self.primary_action, self.secondary_action)

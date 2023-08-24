@@ -38,6 +38,19 @@ def hide_huds(image : Image) -> Image:
     del draw
     return image
 
+def hide_huds_numpy(image : np.array) -> np.array:
+    """Hides huds like inventory, crafting menu, health, sanity, hunger
+
+    :param image: input image
+    :type image: Image
+    :return: output image
+    :rtype: Image
+    """
+    limits = [(0, 190, 65, 890), (420, 1010, 1500, 1080), (1680, 0, 1920, 290), (1780, 950, 1920, 1080)]
+    for limit in limits:
+        image[limit[1]:limit[3], limit[0]:limit[2], :] = 0
+    return image
+
 def hide_huds_and_player(image : Image) -> Image:
     """Hides huds like inventory, crafting menu, health, sanity, hunger and the player
 

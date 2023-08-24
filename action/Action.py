@@ -49,6 +49,7 @@ class Action:
                     mouse.right_click()
                 elif mouse_action[0] == "move":
                     mouse.move(mouse_action[1].x1, mouse_action[1].x2)
+        
 
     def act_mock(self, control: Control) -> list[str]:
         """Same as act, but doesn't actually perform the action and also returns keys_to_release

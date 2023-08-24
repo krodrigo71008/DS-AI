@@ -147,10 +147,6 @@ class WorldModel:
     def update_local(self, object_list : list[ImageObject]) -> None:
         self.local_objects = object_list
 
-    # time_delta should be GameTime
-    def schedule_update(self, pos : Point2d, creation_time : float, change : str, time_delta : float, instance : ObjectModel) -> None:
-        heapq.heappush(self.update_queue, (self.clock.time_from_now(time_delta), creation_time, pos, change, instance))
-
     def decide_player_position(self, player_positions : list[Point2d]) -> None:
         """Decide which one of the given possible positions is the real one
 
@@ -314,9 +310,7 @@ class WorldModel:
         if best_match is None:
             # in this case, I just identified something that's not in the WorldModel yet, so I create a new object
             # the second parameter (creation_time) is used as tiebreaker in case two updates are scheduled at the same time
-            obj = factory.create_object(image_obj.id, pos, image_obj.box,
-                                        lambda change, time_delta, instance:
-                                        self.schedule_update(pos, time.time(), change, time_delta, instance))
+            obj = factory.create_object(image_obj.id, pos, image_obj.box, self.update_queue, self.clock)
 
             self.additions_to_recent_objects.append([obj, 1])
         else:

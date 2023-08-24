@@ -15,7 +15,7 @@ from utility.utility import clamp2pi
 
 
 class Control:
-    def __init__(self, debug=False, queue=None, clock=Clock()):
+    def __init__(self, debug=False, clock=Clock()):
         self.key_action = None
         self.mouse_action = None
         self.clock : Clock = clock
@@ -62,7 +62,6 @@ class Control:
         self.objective = None
         if self.debug:
             self.records = []
-            self.queue = queue
 
     def control(self, decision_making: DecisionMaking, modeling: Modeling):
         self.clock.update()
@@ -126,15 +125,13 @@ class Control:
                 self.action_in_progress = True
                 self.start_time = self.clock.time()
         if self.debug:
-            if self.queue is not None:
-                if self.current_action == "go_to" or self.current_action == "explore":
-                    self.queue.put(("current_action", (self.current_action, self.objective)))
-                else:
-                    self.queue.put(("current_action", self.current_action))
-                self.queue.put(("key_action", self.key_action))
-                self.queue.put(("mouse_action", self.mouse_action))
             self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
                                  self.current_action, self.clock.time_in_seconds, self.update_at_end))
+            if self.current_action == "go_to" or self.current_action == "explore":
+                cur_action = (self.current_action, self.objective)
+            else:
+                cur_action = self.current_action
+            return (cur_action, self.key_action, self.mouse_action)
 
     def continue_action(self, modeling: Modeling) -> bool:
         """Continues an ongoing action and returns whether the rest of the control should run this iteration

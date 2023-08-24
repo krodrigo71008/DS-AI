@@ -14,6 +14,7 @@ from modeling.mobs.MobModel import MobModel
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
 from utility.Point2d import Point2d
+from utility.Clock import Clock
 
 
 class Factory:
@@ -22,7 +23,7 @@ class Factory:
 
     # receives image id and returns an object
     @staticmethod
-    def create_object(image_id : int, pos : Point2d, latest_screen_position : Point2d, update_function : "function"=None) -> ObjectModel:
+    def create_object(image_id : int, pos : Point2d, latest_screen_position : Point2d, update_queue : list[float, int, int, str]=None, clock : Clock=None) -> ObjectModel:
         """Create object described by image_id
 
         :param image_id: image_id from Perception
@@ -31,8 +32,10 @@ class Factory:
         :type pos: Point2d
         :param latest_screen_position: latest screen position of the object
         :type latest_screen_position: Point2d
-        :param update_function: "function" to schedule events in the world model, defaults to None
-        :type update_function: "function", optional
+        :param update_queue: priority queue with (time, object_id, index, change), defaults to None
+        :type update_queue: list[float, int, int, str], optional
+        :param clock: WorldModel's clock, defaults to None
+        :type clock: Clock, optional
         :return: requested object
         :rtype: ObjectModel
         """
@@ -44,9 +47,9 @@ class Factory:
         if obj_id == 3:
             return Flower(pos, latest_screen_position)
         if obj_id == 4:
-            return Grass(pos, latest_screen_position, image_id, update_function)
+            return Grass(pos, latest_screen_position, image_id, update_queue, clock)
         if obj_id == 5:
-            return Sapling(pos, latest_screen_position, image_id, update_function)
+            return Sapling(pos, latest_screen_position, image_id, update_queue, clock)
         if obj_id == 6:
             return PickableObjectModel(pos, latest_screen_position, obj_id, "Seeds")
         if obj_id == 7:
@@ -58,13 +61,13 @@ class Factory:
         if obj_id == 10:
             return PickableObjectModel(pos, latest_screen_position, obj_id, "PigSkin")
         if obj_id == 11:
-            return Ashes(pos, latest_screen_position, update_function)
+            return Ashes(pos, latest_screen_position, update_queue, clock)
         if obj_id == 12:
-            return TreeEvergreen(pos, latest_screen_position, image_id, update_function)
+            return TreeEvergreen(pos, latest_screen_position, image_id, update_queue, clock)
         if obj_id == 13:
-            return SpiderNest(pos, latest_screen_position, image_id, update_function)
+            return SpiderNest(pos, latest_screen_position, image_id, update_queue, clock)
         if obj_id == 14:
-            return BerryBush(pos, latest_screen_position, image_id, update_function)
+            return BerryBush(pos, latest_screen_position, image_id, update_queue, clock)
         if obj_id == 15:
             return PickableObjectModel(pos, latest_screen_position, obj_id, "Honey")
         if obj_id == 16:
@@ -82,7 +85,7 @@ class Factory:
         if obj_id == 22:
             return PickableObjectModel(pos, latest_screen_position, obj_id, "Carrot")
         if obj_id == 23:
-            return Campfire(pos, latest_screen_position, image_id, update_function)
+            return Campfire(pos, latest_screen_position, image_id, update_queue, clock)
         if obj_id == 24:
             return PickableObjectModel(pos, latest_screen_position, obj_id, "SpiderGland")
         if obj_id == 25:

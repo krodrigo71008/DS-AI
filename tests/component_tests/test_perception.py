@@ -21,6 +21,7 @@ def generate_detections_all_models(folder_path : str) -> None:
     filenames.extend(glob.glob(folder_path + '/*.png', recursive=True))
     models = glob.glob("perception/darknet/models/*.pt")
     perception = Perception()
+    perception.CONFIDENCE_THRESHOLD = .1
     class_names = get_class_names()
     for model in models:
         model_name = Path(model).stem
