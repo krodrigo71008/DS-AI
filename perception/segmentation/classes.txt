@@ -1,0 +1,8 @@
+bg
+forest
+grass
+marsh
+ocean
+rocky
+savanna
+spider_web

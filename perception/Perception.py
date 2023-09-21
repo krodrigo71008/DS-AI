@@ -50,13 +50,13 @@ class Perception:
         frame = hide_huds_numpy(frame)
         classes, scores, boxes = self.process_frame(frame) # takes like 50 ms avg
         new_classes = [yolo_id_converter.yolo_to_actual_id(id_) for id_ in classes]
-        objects = []
+        self.objects = []
         for class_id, score, box in zip(new_classes, scores, boxes):
             obj = ImageObject(class_id, score, box)
-            objects.append(obj)
+            self.objects.append(obj)
         if self.debug:
             self.queue.put(("detected_objects", draw_annotations(frame, classes, scores, boxes)[0])) # takes like 20 ms avg
-        return objects, classes, scores, boxes
+        return self.objects, classes, scores, boxes
 
 class PerceptionRecorder(Perception):
     def __init__(self, debug=False, queue=None):

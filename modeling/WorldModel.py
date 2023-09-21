@@ -275,7 +275,7 @@ class WorldModel:
         :type distance: float
         :param fov: camera FOV
         :type fov: float
-        :return: position in the world's coordinate system, but with the origin in the point in the screen center
+        :return: position in the world's coordinate system
         :rtype: Point2d
         """
         pos = self.local_to_almost_global_position(local_position, heading, pitch, distance, fov)

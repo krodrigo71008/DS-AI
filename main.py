@@ -1,6 +1,5 @@
 import time
 from multiprocessing import Process, Queue, Value
-import queue
 
 import keyboard
 
@@ -9,6 +8,7 @@ from control.Control import Control
 from decisionMaking.DecisionMaking import DecisionMaking
 from modeling.Modeling import Modeling
 from perception.Perception import Perception
+from perception.SegmentationModel import SegmentationModel
 from utility.TimeRecorder import TimeRecorder
 from utility.DebugScreen import DebugScreen
 
@@ -23,7 +23,17 @@ def vision_main(detected_objects_queue: Queue, should_start: Value, should_stop:
         objects = perception.perceive()[0]
         detected_objects_queue.put((objects, timestamp))
 
-def control_main(detected_objects_queue: Queue, should_start: Value, should_stop: Value, q: Queue = None):
+def segmentation_main(segementation_results_queue: Queue, should_start: Value, should_stop: Value, q: Queue = None):
+    seg_model = SegmentationModel(debug=q is not None, queue=q)
+    while should_start.value == 0:
+        pass
+    start = time.time()
+    while should_stop.value == 0 and time.time() - start < 60:
+        timestamp = time.time()
+        results = seg_model.perceive()
+        segementation_results_queue.put((results, timestamp))
+
+def control_main(detected_objects_queue: Queue, segmentation_queue: Queue, should_start: Value, should_stop: Value, q: Queue = None):
     action = Action()
     control = Control(debug=q is not None)
     decision_making = DecisionMaking(debug=q is not None)
@@ -35,7 +45,7 @@ def control_main(detected_objects_queue: Queue, should_start: Value, should_stop
     while detected_objects_queue.empty():
         pass
     while should_stop.value == 0 and time.time() - start < 60:
-        q1 = modeling.update_model(detected_objects_queue)
+        q1 = modeling.update_model(detected_objects_queue, segmentation_queue)
         q2 = decision_making.decide(modeling)
         q3 = control.control(decision_making, modeling)
         action.act(control)
@@ -49,10 +59,16 @@ if __name__ == "__main__":
         should_start = Value('b', 0)
         should_stop = Value('b', 0)
         detected_objects_queue = Queue()
+        segmentation_queue = Queue()
         debug_screen = DebugScreen()
-        vision_process = Process(target=vision_main, args=(detected_objects_queue, should_start, should_stop, debug_screen.vision_debug_queue))
+        vision_process = Process(target=vision_main, 
+                                 args=(detected_objects_queue, should_start, should_stop, debug_screen.vision_debug_queue))
         vision_process.start()
-        control_process = Process(target=control_main, args=(detected_objects_queue, should_start, should_stop, debug_screen.control_debug_queue))
+        segmentation_process = Process(target=segmentation_main, 
+                                       args=(segmentation_queue, should_start, should_stop, debug_screen.segmentation_debug_queue))
+        segmentation_process.start()
+        control_process = Process(target=control_main, 
+                                  args=(detected_objects_queue, segmentation_queue, should_start, should_stop, debug_screen.control_debug_queue))
         control_process.start()
         start = time.time()
         while time.time() - start < 60:
@@ -64,10 +80,14 @@ if __name__ == "__main__":
     else:
         should_start = Value('b', 0)
         should_stop = Value('b', 0)
-        detected_objects_queue = queue.Queue()
+        detected_objects_queue = Queue()
+        segmentation_queue = Queue()
         vision_process = Process(target=vision_main, args=(detected_objects_queue, should_start, should_stop))
         vision_process.start()
-        control_process = Process(target=control_main, args=(detected_objects_queue, should_start, should_stop))
+        segmentation_process = Process(target=segmentation_main, 
+                                       args=(segmentation_queue, should_start, should_stop))
+        segmentation_process.start()
+        control_process = Process(target=control_main, args=(detected_objects_queue, segmentation_queue, should_start, should_stop))
         control_process.start()
         start = time.time()
         while time.time() - start < 60:

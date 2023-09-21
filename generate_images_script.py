@@ -12,7 +12,7 @@ from utility.generate_images import generate_image
 
 if __name__ == "__main__":
     obj_info = pd.read_csv("utility/objects_info.csv")
-    MINIMUM_IMAGE_USAGE = 0.2 # should be between 0 and 1
+    MINIMUM_IMAGE_USAGE = 0.5 # should be between 0 and 1
     MINIMUM_ANNOTATIONS_PER_IMPORTANT_CLASS = 500
     NOT_IMPORTANT_OBJECTS_PER_IMAGE_RANGE = (0, 25)
     IMPORTANT_OBJECTS_PER_IMAGE_RANGE = (0, 10)
