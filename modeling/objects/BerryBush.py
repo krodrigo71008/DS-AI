@@ -1,22 +1,23 @@
-import heapq
-import time
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from utility.GameTime import GameTime
-from utility.Point2d import Point2d
-from utility.Clock import Clock
+if TYPE_CHECKING:
+    from modeling.Scheduler import Scheduler
+    from utility.Point2d import Point2d
 
 BERRYBUSH_READY = 35
 BERRYBUSH_HARVESTED = 36
 
 
 class BerryBush(ObjectWithMultipleForms):
-    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, update_queue : list[float, int, int, str], clock: Clock):
-        super().__init__(False, position, latest_screen_position, [BERRYBUSH_READY, BERRYBUSH_HARVESTED], id_, update_queue, clock)
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler):
+        super().__init__(False, position, latest_screen_position, [BERRYBUSH_READY, BERRYBUSH_HARVESTED], id_, scheduler)
         if id_ == BERRYBUSH_HARVESTED:
-            heapq.heappush(update_queue, (clock.time_from_now(GameTime(non_winter_days=4.6875)), time.time(), position, "grow", self))
+            scheduler.schedule_change(GameTime(non_winter_days=4.6875), position, "grow", self)
 
-    def update(self, change):
+    def update(self, change : str):
         if change == "grow":
             self._state = BERRYBUSH_READY
 
@@ -33,7 +34,7 @@ class BerryBush(ObjectWithMultipleForms):
 
     def harvest(self):
         self._state = BERRYBUSH_HARVESTED
-        heapq.heappush(self.update_queue, (self.clock.time_from_now(GameTime(non_winter_days=4.6875)), time.time(), self.position, "grow", self))
+        self.scheduler.schedule_change(GameTime(non_winter_days=4.6875), self.position, "grow", self)
 
     def is_harvested(self) -> bool:
         return self._state == BERRYBUSH_HARVESTED

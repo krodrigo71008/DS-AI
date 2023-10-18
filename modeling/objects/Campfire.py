@@ -1,14 +1,18 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
-from utility.GameTime import GameTime
-from utility.Point2d import Point2d
+if TYPE_CHECKING:
+    from modeling.Scheduler import Scheduler
+    from utility.Point2d import Point2d
 
 
 class Campfire(ObjectWithMultipleForms):
-    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, update_function : "function"):
-        super().__init__(False, position, latest_screen_position, [46], id_, update_function)
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler):
+        super().__init__(False, position, latest_screen_position, [46], id_, scheduler)
         # I'll add the other states later
 
-    def update(self, change):
+    def update(self, change : str):
         pass
 
     def handle_object_detected(self, state):

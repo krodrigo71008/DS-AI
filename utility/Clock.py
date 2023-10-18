@@ -1,4 +1,5 @@
 import time
+import numpy as np
 from utility.GameTime import GameTime
 
 
@@ -18,17 +19,38 @@ class Clock:
                             13, 13, 13, 12, 12, 12, 12, 12, 12, 12,
                             12, 12, 12, 13, 13]
 
+    def start(self):
+        self._last_time = time.time()
+
     def update(self):
         current_time = time.time()
         self.time_in_seconds += current_time - self._last_time
         self._last_dt = current_time - self._last_time
         self._last_time = current_time
 
-    def dt(self):
+    def dt(self) -> float:
+        """Gives time that passed between current time in this clock and the previous update
+
+        :return: passed time before last update
+        :rtype: float
+        """
         return self._last_dt
 
-    def time(self):
+    def time(self) -> float:
+        """Gives time in seconds
+
+        :return: time in seconds
+        :rtype: float
+        """
         return self.time_in_seconds
+
+    def raw_timestamp(self) -> float:
+        """Gives timestamp in seconds
+
+        :return: timestamp in seconds
+        :rtype: float
+        """
+        return self._last_time
 
     # time_delta should be GameTime
     def time_from_now(self, time_delta: GameTime) -> float:
@@ -37,7 +59,7 @@ class Clock:
 
         :param time_delta: how much time in the future
         :type time_delta: GameTime
-        :return: 'timestamp' representing
+        :return: 'timestamp' representing the 
         :rtype: float
         """
         if time_delta.exclude_winter:
@@ -91,11 +113,12 @@ class Clock:
 
 
 class ClockMock(Clock):
-    def __init__(self, start_time=0, initial_last_time=0):
+    def __init__(self, times_to_return : np.array):
+        start_time = times_to_return[0]
         super().__init__(start_time)
-        self.times_to_return = []
-        self.current_time_index = 0
-        self._last_time = initial_last_time
+        self.times_to_return = times_to_return
+        self.current_time_index = 2
+        self._last_time = times_to_return[1]
 
     def update(self):
         current_time = self.times_to_return[self.current_time_index]
@@ -104,10 +127,27 @@ class ClockMock(Clock):
         self._last_dt = current_time - self._last_time
         self._last_time = current_time
 
+    # start must not do anything since _last_time is already initialized in the constructor
+    def start(self):
+        pass
+
+    def next_time(self):
+        if self.current_time_index == len(self.times_to_return):
+            return None
+        return self.times_to_return[self.current_time_index]
+
 class ClockRecorder(Clock):
-    def __init__(self, start_time=0):
+    def __init__(self, start_time=0.):
         super().__init__(start_time)
+        # time_records[0] is start_time, time_records[1] is initial _last_time (used to calculate dt), 2 and 
+        # onwards are time measurements
         self.time_records = []
+        self.time_records.append(start_time)
+        self.time_records.append(self._last_time)
+
+    def start(self):
+        super().start()
+        self.time_records[1] = self._last_time
     
     def update(self):
         current_time = time.time()

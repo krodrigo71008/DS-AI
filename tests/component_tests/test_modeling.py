@@ -1,10 +1,11 @@
 import math
-import numpy as np
 
+import numpy as np
 import pytest
+from PIL import Image
+
 from modeling.objects.Grass import GRASS_HARVESTED, GRASS_READY, Grass
 from modeling.objects.Sapling import SAPLING_HARVESTED, SAPLING_READY, Sapling
-
 from perception.ImageObject import ImageObject
 from modeling.Modeling import Modeling
 from modeling.PlayerModel import PlayerModel
@@ -357,3 +358,18 @@ def test_world_model_filtering():
 # im3 -> (960, 671)
 # im4 -> (960, 671)
 # im5 -> (960, 550)
+
+def try_out_warp_perspective(image_path: str):
+    clock = Clock()
+    player = PlayerModel(clock)
+    world = WorldModel(player, clock)
+    image = Image.open(image_path).resize((512, 512))
+    res = world.warp_image_to_ground(np.asarray(image), CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+    Image.fromarray(res).save("warped_test.jpg")
+    return res
+
+def try_out_process_segmentation_image(segmentation_array: np.array):
+    clock = Clock()
+    player = PlayerModel(clock)
+    world = WorldModel(player, clock)
+    world.process_segmentation_image(segmentation_array)

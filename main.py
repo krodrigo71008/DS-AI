@@ -13,38 +13,45 @@ from utility.TimeRecorder import TimeRecorder
 from utility.DebugScreen import DebugScreen
 
 
+MAX_TIMEOUT_TIME = 60
+
 def vision_main(detected_objects_queue: Queue, should_start: Value, should_stop: Value, q: Queue = None):
     perception = Perception(debug=q is not None, queue=q)
+    print("Perception ready")
     while should_start.value == 0:
         pass
     start = time.time()
-    while should_stop.value == 0 and time.time() - start < 60:
+    while should_stop.value == 0 and time.time() - start < MAX_TIMEOUT_TIME:
         timestamp = time.time()
         objects = perception.perceive()[0]
         detected_objects_queue.put((objects, timestamp))
 
-def segmentation_main(segementation_results_queue: Queue, should_start: Value, should_stop: Value, q: Queue = None):
+def segmentation_main(segmentation_results_queue: Queue, should_start: Value, should_stop: Value, q: Queue = None):
     seg_model = SegmentationModel(debug=q is not None, queue=q)
+    print("Segmentation ready")
     while should_start.value == 0:
         pass
     start = time.time()
-    while should_stop.value == 0 and time.time() - start < 60:
+    while should_stop.value == 0 and time.time() - start < MAX_TIMEOUT_TIME:
         timestamp = time.time()
         results = seg_model.perceive()
-        segementation_results_queue.put((results, timestamp))
+        segmentation_results_queue.put((results, timestamp))
 
 def control_main(detected_objects_queue: Queue, segmentation_queue: Queue, should_start: Value, should_stop: Value, q: Queue = None):
     action = Action()
     control = Control(debug=q is not None)
     decision_making = DecisionMaking(debug=q is not None)
     modeling = Modeling(debug=q is not None)
+    print("Control ready")
     while should_start.value == 0:
         pass
     start = time.time()
+    modeling.clock.start()
+    control.clock.start()
     # wait for YOLO to initialize, only start doing stuff after we receive information
     while detected_objects_queue.empty():
         pass
-    while should_stop.value == 0 and time.time() - start < 60:
+    while should_stop.value == 0 and time.time() - start < MAX_TIMEOUT_TIME:
         q1 = modeling.update_model(detected_objects_queue, segmentation_queue)
         q2 = decision_making.decide(modeling)
         q3 = control.control(decision_making, modeling)
@@ -71,7 +78,7 @@ if __name__ == "__main__":
                                   args=(detected_objects_queue, segmentation_queue, should_start, should_stop, debug_screen.control_debug_queue))
         control_process.start()
         start = time.time()
-        while time.time() - start < 60:
+        while time.time() - start < MAX_TIMEOUT_TIME:
             if keyboard.is_pressed("p"):
                 should_start.value = 1
             elif keyboard.is_pressed("l"):
@@ -90,7 +97,7 @@ if __name__ == "__main__":
         control_process = Process(target=control_main, args=(detected_objects_queue, segmentation_queue, should_start, should_stop))
         control_process.start()
         start = time.time()
-        while time.time() - start < 60:
+        while time.time() - start < MAX_TIMEOUT_TIME:
             if keyboard.is_pressed("p"):
                 should_start.value = 1
             elif keyboard.is_pressed("l"):

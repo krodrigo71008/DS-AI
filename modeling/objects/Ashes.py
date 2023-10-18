@@ -1,16 +1,17 @@
-import heapq
-import time
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
-from modeling.objects.ObjectModel import ObjectModel
+from modeling.objects.ObjectWithSingleForm import ObjectWithSingleForm
 from utility.GameTime import GameTime
-from utility.Point2d import Point2d
-from utility.Clock import Clock
+if TYPE_CHECKING:
+    from modeling.Scheduler import Scheduler
+    from utility.Point2d import Point2d
 
-class Ashes(ObjectModel):
-    def __init__(self, position : Point2d, latest_screen_position : Point2d, update_queue : list[float, int, int, str], clock: Clock):
+class Ashes(ObjectWithSingleForm):
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, scheduler : Scheduler):
         super().__init__(True, position, latest_screen_position)
+        self.scheduler = scheduler
+        scheduler.schedule_change(GameTime(seconds=20), position, "disappear", self)
 
-        heapq.heappush(update_queue, (clock.time_from_now(GameTime(seconds=20)), time.time(), self.position, "disappear", self))
-
-    def update(self, change):
+    def update(self, change : str):
         pass

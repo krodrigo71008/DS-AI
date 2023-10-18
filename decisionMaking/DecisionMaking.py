@@ -83,7 +83,7 @@ class DecisionMaking:
             if np.array(torch_count).sum() == 0:
                 self.secondary_action = ("craft", ["Torch"])
             else:
-                if type(modeling.player_model.inventory.hand.object).__name__ != "Torch":
+                if modeling.player_model.inventory.slots["Hand"].object.name != "Torch":
                     self.secondary_action = ("equip", ["Torch"])
         else:
             monsters = [

@@ -31,3 +31,4 @@ test.py
 *.jpg
 *.zip
 *.pt
+*.npy

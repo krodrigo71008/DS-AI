@@ -15,7 +15,7 @@ def run_perception_modeling_decision_making_single_frame(input_image_path):
     vis_screen = Visualizer()
 
     img = cv2.imread(input_image_path)
-    vis_screen.update_image(img)
+    vis_screen.update_yolo_image(img)
     # converting img from BGR to RGB
     img = img[:, :, ::-1]
     objects = perception.perceive(img)[0]

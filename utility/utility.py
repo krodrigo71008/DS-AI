@@ -200,7 +200,9 @@ def get_multiples_in_range(number : int, range_ : tuple[int, int]) -> list[int]:
     :return: list of multiples inside the given range
     :rtype: list[int]
     """
-    aux_ = round(range_[0]/number)*number
+    aux_ = int(range_[0]//number)*number
+    if aux_ < range_[0]:
+        aux_ += number
     ans = []
     while aux_ < range_[1]:
         ans.append(aux_)
@@ -245,7 +247,7 @@ def draw_annotations(image : np.array, classes : list[int], scores : list[float]
         elif position == "down":
             cv2.putText(image_result, label, (box[0] - box[2]//2, box[1] + box[3]//2 + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         else:
-            raise ValueError("Invalid argument 'position'!")
+            raise ValueError("Invalid 'position' argument!")
     
     return image_result, results
     
@@ -279,3 +281,20 @@ def iou(bb1 : tuple[float], bb2: tuple[float]) -> float:
     union = area1 + area2 - intersection + 1e-6
 
     return intersection/union
+
+def get_color_representation_dict() -> dict[int, tuple[np.array, str]]:
+    """Returns a dict mapping all color numbers to tuples with the RGB value corresponding to the color and its hex representation
+
+    :return: dict mapping color numbers to RGB values representing the given terrain and its hex representation
+    :rtype: dict[int, tuple[np.array, str]]
+    """
+    color_dict = {}
+    color_dict[0] = (None, None)
+    color_dict[1] = (np.array([0, 100, 0]), "#006400")
+    color_dict[2] = (np.array([0, 255, 0]), "#00FF00")
+    color_dict[3] = (np.array([147, 112, 219]), "#9370DB")
+    color_dict[4] = (np.array([0, 255, 255]), "#00FFFF")
+    color_dict[5] = (np.array([128, 128, 128]), "#808080")
+    color_dict[6] = (np.array([238, 213, 18]), "#EED5B7")
+    color_dict[7] = (np.array([255, 255, 255]), "#FFFFFF")
+    return color_dict

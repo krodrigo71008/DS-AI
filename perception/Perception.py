@@ -28,6 +28,7 @@ class Perception:
         frame = Image.fromarray(frame, mode="RGB")
         frame = np.asarray(frame)
         self.process_frame(frame)
+        self.process_frame(frame)
 
     def get_screenshot(self):
         img = np.asarray(self.sct.grab(mon)) # this is in BGRA
@@ -60,8 +61,8 @@ class Perception:
 
 class PerceptionRecorder(Perception):
     def __init__(self, debug=False, queue=None):
-        super().__init__(debug, queue)
         self.all_captured_images : list[np.array] = []
+        super().__init__(debug, queue)
 
     def get_screenshot(self):
         ans = super().get_screenshot()

@@ -6,8 +6,9 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from perception.constants import SCREEN_SIZE
-from modeling.constants import CHUNK_SIZE
-from utility.utility import get_multiples_in_range
+from modeling.constants import CHUNK_SIZE, TILE_SIZE
+from modeling.TerrainTile import TerrainTile
+from utility.utility import get_multiples_in_range, get_color_representation_dict
 from utility.Point2d import Point2d
 
 class DebugScreen:
@@ -43,7 +44,7 @@ class DebugScreen:
         # self.local_map = tk.Canvas(self.local_map_div, height=self.LOCAL_CANVAS_HEIGHT, width=self.LOCAL_CANVAS_WIDTH, highlightbackground="red", highlightcolor="red", relief='ridge')
         # self.local_map.pack()
         # self.local_map_div.grid(row=0, column=1, rowspan=2)
-        self.perception_display_choice = "segmentation" # this has to be either "objects" or "segmentation"
+        self.perception_display_choice = "objects" # this has to be either "objects" or "segmentation"
         assert self.perception_display_choice == "objects" or self.perception_display_choice == "segmentation"
         if self.perception_display_choice == "objects":
             self.perception_div = ttk.LabelFrame(self.window, text="Detected objects", padding=40)
@@ -105,7 +106,7 @@ class DebugScreen:
         # only use the most updated info
         if info is not None and info[0] == "control_info":
             _, q1, q2, q3 = info
-            world_model_objects, fov_corners, player_position = q1
+            world_model_objects, fov_corners, player_position, terrain_tiles = q1
             primary_action, secondary_action = q2
             current_action, key_action, mouse_action = q3
             self.primary_action_label["text"] = "Primary action: " + str(primary_action)
@@ -138,6 +139,7 @@ class DebugScreen:
         if self.player_position is not None:
             x1_range = (self.player_position.x1 - self.CLOSE_OBJECTS_X1/2, self.player_position.x1 + self.CLOSE_OBJECTS_X1/2)
             x2_range = (self.player_position.x2 - self.CLOSE_OBJECTS_X2/2, self.player_position.x2 + self.CLOSE_OBJECTS_X2/2)
+            self.draw_tiles(terrain_tiles, TILE_SIZE, x1_range, x2_range)
             for name, position in self.world_objects:
                 if position.x1 > x1_range[0] and position.x1 < x1_range[1] and position.x2 > x2_range[0] and position.x2 < x2_range[1]:
                     if name == "Grass":
@@ -185,6 +187,23 @@ class DebugScreen:
         
         map_.create_polygon(x1, y1, x2, y2, x3, y3, x4, y4, fill='', outline="black")
     
+    def draw_tiles(self, terrain_tiles: dict[tuple[int, int], TerrainTile], tile_size : int, x1_range : tuple[int, int], x2_range : tuple[int, int]):
+        x1_lines = get_multiples_in_range(tile_size, x1_range)
+        x2_lines = get_multiples_in_range(tile_size, x2_range)
+        map_ = self.world_map
+        color_dict = get_color_representation_dict()
+        for x1 in x1_lines:
+            for x2 in x2_lines:
+                if x1 + tile_size < x1_range[1] and x2 + tile_size < x2_range[1]:
+                    if (int(x1//tile_size), int(x2//tile_size)) not in terrain_tiles:
+                        continue
+                    tile_type = terrain_tiles[int(x1//tile_size), int(x2//tile_size)].type
+                    lx, ly = self.convert_world_coords_to_world_graph(x1, x2, x1_range, x2_range)
+                    rx, ry = self.convert_world_coords_to_world_graph(x1+tile_size, x2+tile_size, x1_range, x2_range)
+                    color = color_dict[tile_type][1]
+                    if color is not None:
+                        map_.create_rectangle(lx, ly, rx, ry, fill=color)
+
     def draw_chunk_lines_world_canvas(self, chunk_size : int, x1_range : tuple[int, int], x2_range : tuple[int, int]):
         x1_lines = get_multiples_in_range(chunk_size, x1_range)
         x2_lines = get_multiples_in_range(chunk_size, x2_range)

@@ -207,7 +207,7 @@ class Control:
             return_value = None
             if self.update_at_end[0] == "pick_up":
                 # update_at_end[1] is the Modeling Object
-                obj_name = type(self.update_at_end[1]).__name__
+                obj_name = self.update_at_end[1].name_str()
                 # update the inventory depending on the collected object
                 if obj_name == "BerryBush":
                     modeling.player_model.inventory.add_item("Berries", 1)

@@ -1,22 +1,23 @@
-import heapq
-import time
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from utility.GameTime import GameTime
-from utility.Point2d import Point2d
-from utility.Clock import Clock
+if TYPE_CHECKING:
+    from modeling.Scheduler import Scheduler
+    from utility.Point2d import Point2d
 
 SAPLING_READY = 23
 SAPLING_HARVESTED = 24
 
 
 class Sapling(ObjectWithMultipleForms):
-    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, update_queue : list[float, int, int, str], clock: Clock):
-        super().__init__(False, position, latest_screen_position, [SAPLING_READY, SAPLING_HARVESTED], id_, update_queue, clock)
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler):
+        super().__init__(False, position, latest_screen_position, [SAPLING_READY, SAPLING_HARVESTED], id_, scheduler)
         if id_ == SAPLING_HARVESTED:
-            heapq.heappush(update_queue, (clock.time_from_now(GameTime(non_winter_days=4)), time.time(), position, "grow", self))
+            scheduler.schedule_change(GameTime(non_winter_days=4), position, "grow", self)
 
-    def update(self, change):
+    def update(self, change : str):
         if change == "grow":
             self._state = SAPLING_READY
 
@@ -32,7 +33,7 @@ class Sapling(ObjectWithMultipleForms):
 
     def harvest(self):
         self._state = SAPLING_HARVESTED
-        heapq.heappush(self.update_queue, (self.clock.time_from_now(GameTime(non_winter_days=4)), time.time(), self.position, "grow", self))
+        self.scheduler.schedule_change(GameTime(non_winter_days=4), self.position, "grow", self)
 
     def is_harvested(self) -> bool:
         return self._state == SAPLING_HARVESTED

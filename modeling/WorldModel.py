@@ -1,24 +1,32 @@
-import heapq
 import math
 import time
 import queue
+import glob
+from pathlib import Path
+
+import numpy as np
+import cv2
+from PIL import Image
 
 from perception.ImageObject import ImageObject
+from perception.constants import SCREEN_SIZE, SEGMENTATION_INPUT_SIZE
 from modeling.PlayerModel import PlayerModel
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from modeling.Factory import factory
 from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_FOR_OBJECT_REMOVAL, CYCLES_TO_ADMIT_OBJECT
 from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING, CHUNK_SIZE, DISTANCE_FOR_VALID_PLAYER_POSITION
+from modeling.constants import TILE_SIZE
 from modeling.ObjectsInfo import objects_info
-from perception.constants import SCREEN_SIZE
+from modeling.TerrainTile import TerrainTile
+from modeling.Scheduler import Scheduler
 from utility.Clock import Clock
 from utility.Point2d import Point2d
-from utility.utility import is_inside_convex_polygon
+from utility.utility import is_inside_convex_polygon, get_color_representation_dict
 
 
 class WorldModel:
-    def __init__(self, player : PlayerModel, clock : Clock):
+    def __init__(self, player : PlayerModel, clock : Clock, debug : bool = False):
         """Generates the world model. It should be noted that the full workflow for a cycle of updating is:
             - if player was detected (on perception), call player_detected()
             - call start_cycle()
@@ -34,24 +42,28 @@ class WorldModel:
         # object_list[id] has the objects with that id
         self.local_objects = []
         # maps object name to the object list
-        self.object_lists = {}
+        self.object_lists : dict[str, list[ObjectModel]] = {}
         # objects_by_chunks maps a chunk index to a list of objects in it
         # (x1, x2) -> list
         self.objects_by_chunks : dict[tuple[int, int], list[ObjectModel]] = {}
         self.mob_list = set()
         self.explored_chunks = set()
-        # update_queue has (time, object_id, index, change)
-        self.update_queue = []
         self.detected_this_cycle : list[list[ObjectModel, bool]] = {}
         self.player : PlayerModel = player
         self.latest_detected_player_position : Point2d = None
         self.cycles_since_player_detected : int = 0
         self.origin_coordinates : Point2d = player.position
+        self.FOLLOW_HEIGHT = 1.5 # extracted from the game code
         self.clock : Clock = clock
-        self.c1 : Point2d = None
-        self.c2 : Point2d = None
-        self.c3 : Point2d = None
-        self.c4 : Point2d = None
+        self.c1 : Point2d = None # for usual values, (2.202, -36.468)
+        self.c2 : Point2d = None # for usual values, (16.263, -2.791)
+        self.c3 : Point2d = None # for usual values, (-2.791, 16.263)
+        self.c4 : Point2d = None # for usual values, (-36.468, 2.202)
+        # for heading = 0, the values are:
+        # -24.230 -27.344
+        # 9.526 -13.474
+        # 9.526 13.474
+        # -24.230 27.344
         self.c1_deletion_border : Point2d = None
         self.c2_deletion_border : Point2d = None
         self.c3_deletion_border : Point2d = None
@@ -62,6 +74,13 @@ class WorldModel:
         self.recent_objects : list[list[ObjectModel, int]] = []
         self.additions_to_recent_objects : list[list[ObjectModel, int]] = []
         self.hovering_object : ObjectModel = None
+        # i, j index is leftuppermost corner (to get i, j for x, y, divide by TILE_SIZE and round down)
+        self.tiles : dict[tuple[int, int], TerrainTile] = {}
+        self.scheduler = Scheduler(self.clock, self)
+        self.yolo_timestamp : float = None
+        self.segmentation_timestamp : float = None
+        self.debug = debug
+        self.latest_debug_image : Image.Image = None
 
     @staticmethod
     def coords_to_chunk_coords(p : Point2d) -> Point2d:
@@ -75,6 +94,183 @@ class WorldModel:
         x1 = p.x1 - math.floor(p.x1/CHUNK_SIZE)*CHUNK_SIZE
         x2 = p.x2 - math.floor(p.x2/CHUNK_SIZE)*CHUNK_SIZE
         return Point2d(x1, x2)
+
+    def remove_object(self, instance : ObjectModel, pos : Point2d) -> None:
+        """Remove object from world model
+
+        :param instance: object instance
+        :type instance: ObjectModel
+        :param pos: position in the world
+        :type pos: Point2d
+        """
+        self.objects_by_chunks[self.point_to_chunk_index(pos)].remove(instance)
+        self.object_lists[instance.name_str()].remove(instance)
+        
+
+    def warp_image_to_ground(self, image: np.array, heading : float, pitch : float, 
+                             distance : float, fov : float) -> tuple[np.array, tuple[float, float], tuple[float, float]]:
+        """Warp image to transform a camera image to the ground coordinates
+
+        :param image: game image from camera's perspective
+        :type image: np.array
+        :param heading: camera heading
+        :type heading: float
+        :param pitch: camera pitch
+        :type pitch: float
+        :param distance: camera distance
+        :type distance: float
+        :param fov: camera FOV
+        :type fov: float
+        :return: warped image, x range and y range relative to the player
+        :rtype: tuple[np.array, tuple[float, float], tuple[float, float]]
+        """
+        # f = H / (2*tan(AFOV/2)), f focal distance, H height, AFOV angular FOV
+        f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
+        cx = SCREEN_SIZE["width"]/2
+        cy = SCREEN_SIZE["height"]/2
+        heading = heading*math.pi/180
+        pitch = pitch*math.pi/180
+        matrix = np.array([
+            [(-f*math.sin(heading)-cx*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
+             (f*math.cos(heading)-cx*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
+             (cx*distance+cx*self.FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"]],
+
+            [(f*math.sin(pitch)*math.cos(heading)-cy*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
+             (f*math.sin(pitch)*math.sin(heading)-cy*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
+             (f*self.FOLLOW_HEIGHT*math.cos(pitch)+cy*distance+cy*self.FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"]],
+
+            [-math.cos(pitch)*math.cos(heading),
+             -math.cos(pitch)*math.sin(heading),
+             distance+self.FOLLOW_HEIGHT*math.sin(pitch)],
+        ])
+        
+        matrix = np.linalg.inv(matrix)
+        # matrix[0, :] = matrix[0, :]*(SEGMENTATION_INPUT_SIZE[0]/52.731)
+        # matrix[1, :] = matrix[1, :]*(SEGMENTATION_INPUT_SIZE[1]/52.731)
+        # 4 image corners
+        c1 = np.array([[0, 0, 1]]).T
+        c2 = np.array([[SEGMENTATION_INPUT_SIZE[0], 0, 1]]).T
+        c3 = np.array([[SEGMENTATION_INPUT_SIZE[0], SEGMENTATION_INPUT_SIZE[1], 1]]).T
+        c4 = np.array([[0, SEGMENTATION_INPUT_SIZE[1], 1]]).T
+        # converted corners
+        r1 = np.matmul(matrix, c1)
+        r2 = np.matmul(matrix, c2)
+        r3 = np.matmul(matrix, c3)
+        r4 = np.matmul(matrix, c4)
+        # finding x and y range
+        x_min = min(r1[0]/r1[2], r2[0]/r2[2], r3[0]/r3[2], r4[0]/r4[2])
+        y_min = min(r1[1]/r1[2], r2[1]/r2[2], r3[1]/r3[2], r4[1]/r4[2])
+        x_max = max(r1[0]/r1[2], r2[0]/r2[2], r3[0]/r3[2], r4[0]/r4[2])
+        y_max = max(r1[1]/r1[2], r2[1]/r2[2], r3[1]/r3[2], r4[1]/r4[2])
+        # this rescales the output because world coordinates would be like 50, but we need it to be like 500
+        matrix[0, :] = matrix[0, :]*(SEGMENTATION_INPUT_SIZE[0]/(x_max - x_min))
+        matrix[1, :] = matrix[1, :]*(SEGMENTATION_INPUT_SIZE[1]/(y_max - y_min))
+        # translating output to be on positive x and y
+        transl_mat = np.eye(3)
+        transl_mat[0, 2] = -x_min*(SEGMENTATION_INPUT_SIZE[0]/(x_max - x_min))
+        transl_mat[1, 2] = -y_min*(SEGMENTATION_INPUT_SIZE[1]/(y_max - y_min))
+        matrix = np.matmul(transl_mat, matrix)
+        
+        image = image.astype('uint8')
+        res = cv2.warpPerspective(image, matrix, (SEGMENTATION_INPUT_SIZE[0], SEGMENTATION_INPUT_SIZE[1]), flags=cv2.INTER_NEAREST)
+        return res, (x_min[0], x_max[0]), (y_min[0], y_max[0])
+
+    def process_segmentation_image(self, image: np.array) -> Image.Image:
+        """Updates tiles based on segmentation info
+
+        :param image: segmentation result image
+        :type image: np.array
+        """
+        # in openCV, x is right and y is down, but for us x1 is down and x2 is right, so they are inverted
+        warped_image, x_range, y_range = self.warp_image_to_ground(image, CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+        player_pos = self.player.estimate_position_at_timestamp(self.segmentation_timestamp)
+        x_min = x_range[0] + player_pos.x2
+        x_max = x_range[1] + player_pos.x2
+        y_min = y_range[0] + player_pos.x1
+        y_max = y_range[1] + player_pos.x1
+
+        x_lines = []
+        aux = (x_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE
+        left_corner_x = aux
+        while aux < x_max:
+            x_lines.append(int((aux - x_min)/(x_max - x_min)*SEGMENTATION_INPUT_SIZE[0]))
+            aux += TILE_SIZE
+
+        y_lines = []
+        aux = (y_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE
+        left_corner_y = aux
+        while aux < y_max:
+            y_lines.append(int((aux - y_min)/(y_max - y_min)*SEGMENTATION_INPUT_SIZE[1]))
+            aux += TILE_SIZE
+
+        # how to do averages efficiently?
+        # kernel_size = x_lines[1] - x_lines[0]
+        # conv_kernel = torch.Tensor(np.ones((kernel_size, kernel_size))/kernel_size/kernel_size)
+        # res_tensor = torch.Tensor(warped_image[x_lines[0]:x_lines[-1], y_lines[0]:y_lines[-1], :]).unsqueeze(0).permute(0, 3, 1, 2)
+
+        for i in range(len(x_lines)-1):
+            x1 = x_lines[i]
+            x2 = x_lines[i+1]
+            for j in range(len(y_lines)-1):
+                y1 = y_lines[j]
+                y2 = y_lines[j+1]
+                # again, opencv x = x2, opencv y = x1
+                cur_chunk = warped_image[x1:x2, y1:y2]
+                values, counts = np.unique(cur_chunk, return_counts=True)
+                tile_id = values[np.argmax(counts)]
+                tile_x1 = int(left_corner_y // TILE_SIZE) + j
+                tile_x2 = int(left_corner_x // TILE_SIZE) + i
+                if tile_id != 0:
+                    if (tile_x1, tile_x2) not in self.tiles.keys():
+                        self.tiles[(tile_x1, tile_x2)] = TerrainTile(tile_id)
+                    else:
+                        self.tiles[(tile_x1, tile_x2)].add_detection(tile_id)
+        
+        if self.debug:
+            # files = glob.glob(debug_folder_path + "*.png")
+            # if len(files) == 0:
+            #     start = 0
+            # else:
+            #     nums = [int(Path(f).name.split(".")[0].split("_")[0]) for f in files]
+            #     nums.sort()
+            #     start = nums[-1] + 1
+            # # we just want to save the result with the name being the next available integer
+            # output_path = Path(debug_folder_path)
+            # debug_image_out = output_path / f"{start}.png"
+            # raw_image_out = output_path / f"{start}_raw.png"
+
+            new_width = SEGMENTATION_INPUT_SIZE[0] + len(y_lines)
+            new_height = SEGMENTATION_INPUT_SIZE[1] + len(x_lines)
+            color_dict = get_color_representation_dict()
+            debug_image_arr = np.zeros((new_width, new_height), dtype=np.uint8)
+
+            palette = [0]*256*3
+            for c, color_info in color_dict.items():
+                if color_info[0] is not None:
+                    palette[c*3:c*3+3] = color_info[0] # [0] is array, [1] is hex representation
+            palette[-3:] = [255, 0, 0] # color for border between tiles
+
+            for i in range(len(x_lines)-1):
+                x1 = x_lines[i]
+                x2 = x_lines[i+1]
+                for j in range(len(y_lines)-1):
+                    y1 = y_lines[j]
+                    y2 = y_lines[j+1]
+                    cur_chunk = warped_image[x1:x2, y1:y2]
+                    debug_image_arr[x1+i+1:x2+i+1, y1+j+1:y2+j+1] = cur_chunk
+            
+            for i, x_line in enumerate(x_lines):
+                debug_image_arr[x_line+i, :] = 255 # border color
+            
+            for i, y_line in enumerate(y_lines):
+                debug_image_arr[:, y_line+i] = 255 # border color
+
+            
+            debug_image = Image.fromarray(debug_image_arr.transpose(), mode="P") # transposing since the game coordinate system has x down and z right
+            debug_image.putpalette(palette, rawmode="RGB")
+            # debug_image.save(debug_image_out)
+            self.latest_debug_image = debug_image
+
 
     def decide_if_explored(self, player_position : Point2d) -> bool:
         """Calculates if the current chunk should be considered explored
@@ -130,18 +326,7 @@ class WorldModel:
         return required
 
     def update(self) -> None:
-        # the [0] gets the 'timestamp' in which the change should happen
-        while len(self.update_queue) > 0 and self.update_queue[0][0] < self.clock.time():
-            tup = heapq.heappop(self.update_queue)
-            pos = tup[2]
-            change = tup[3]
-            instance = tup[4]
-            if change == "disappear":
-                self.objects_by_chunks[self.point_to_chunk_index(pos)].remove(instance)
-                self.object_lists[type(instance).__name__].remove(instance)
-            else:
-                instance.update(change)
-
+        self.scheduler.update()
         self.mob_list = set(filter(lambda mob: mob.update_destruction_time(self.clock.dt()), self.mob_list))
 
     def update_local(self, object_list : list[ImageObject]) -> None:
@@ -188,11 +373,11 @@ class WorldModel:
         # if it's been more than 10 cycles since the last time the player was detected, we'll assume 
         # that the camera is above the player
         if self.cycles_since_player_detected > 10 or self.latest_detected_player_position is None:
-            self.origin_coordinates = self.player.position
+            self.origin_coordinates = self.player.estimate_position_at_timestamp(self.yolo_timestamp)
         else:
             # pos in (x, z) in world coords
             pos = self.local_to_almost_global_position(self.latest_detected_player_position, heading, pitch, distance, fov)
-            self.origin_coordinates = self.player.position - pos
+            self.origin_coordinates = self.player.estimate_position_at_timestamp(self.yolo_timestamp) - pos
         # corners of the trapezoid that we are seeing
         self.c1 = self.local_to_global_position(Point2d(0, 0), heading, pitch, distance, fov)
         self.c2 = self.local_to_global_position(Point2d(0, SCREEN_SIZE["height"]), heading, pitch, distance, fov)
@@ -246,18 +431,16 @@ class WorldModel:
         fy = (local_position.x2 - SCREEN_SIZE["height"]/2)/f
         heading = heading*math.pi/180
         pitch = pitch*math.pi/180
-        # extracted from the game code
-        follow_height = 1.5
-        world_x = (-math.sin(heading)*follow_height*fx
+        world_x = (-math.sin(heading)*self.FOLLOW_HEIGHT*fx
                     -math.sin(heading)*math.sin(pitch)*distance*fx
-                    +math.cos(heading)*math.sin(pitch)*follow_height*fy
+                    +math.cos(heading)*math.sin(pitch)*self.FOLLOW_HEIGHT*fy
                     +math.cos(heading)*distance*fy
-                    -math.cos(heading)*math.cos(pitch)*follow_height)/(math.cos(pitch)*fy+math.sin(pitch))
-        world_z = (math.cos(heading)*follow_height*fx
+                    -math.cos(heading)*math.cos(pitch)*self.FOLLOW_HEIGHT)/(math.cos(pitch)*fy+math.sin(pitch))
+        world_z = (math.cos(heading)*self.FOLLOW_HEIGHT*fx
                     +math.cos(heading)*math.sin(pitch)*distance*fx
-                    +math.sin(heading)*math.sin(pitch)*follow_height*fy
+                    +math.sin(heading)*math.sin(pitch)*self.FOLLOW_HEIGHT*fy
                     +math.sin(heading)*distance*fy
-                    -math.sin(heading)*math.cos(pitch)*follow_height)/(math.cos(pitch)*fy+math.sin(pitch))
+                    -math.sin(heading)*math.cos(pitch)*self.FOLLOW_HEIGHT)/(math.cos(pitch)*fy+math.sin(pitch))
         # in our world model, we'll use (x,z) as the two coordinates
         return Point2d(world_x, world_z)
 
@@ -290,7 +473,7 @@ class WorldModel:
         required_chunks = [self.point_to_chunk_index(pos)]
         adj_required_chunks = self.required_nearby_chunks(pos)
         required_chunks.extend(adj_required_chunks)
-        objects_to_analyze = []
+        objects_to_analyze : list[ObjectModel]= []
         for chunk_index in required_chunks:
             if chunk_index in self.objects_by_chunks:
                 objects_to_analyze.extend(self.objects_by_chunks[chunk_index])
@@ -302,7 +485,7 @@ class WorldModel:
         lowest_distance : float = None
         for obj in objects_to_analyze:
             # if the object is close enough to an already detected object of the same type
-            if pos.distance(obj.position) < DISTANCE_FOR_SAME_OBJECT and type(obj).__name__ == obj_name:
+            if pos.distance(obj.position) < DISTANCE_FOR_SAME_OBJECT and obj.name_str() == obj_name:
                 if best_match is None or obj.position.distance(pos) < lowest_distance:
                     best_match = obj
                     lowest_distance = obj.position.distance(pos)
@@ -310,7 +493,7 @@ class WorldModel:
         if best_match is None:
             # in this case, I just identified something that's not in the WorldModel yet, so I create a new object
             # the second parameter (creation_time) is used as tiebreaker in case two updates are scheduled at the same time
-            obj = factory.create_object(image_obj.id, pos, image_obj.box, self.update_queue, self.clock)
+            obj = factory.create_object(image_obj.id, pos, image_obj.box, self.scheduler)
 
             self.additions_to_recent_objects.append([obj, 1])
         else:
@@ -327,7 +510,7 @@ class WorldModel:
                 best_match.handle_object_detected(image_obj.id)
             # this is the error from the position in modeling to the one being observed now 
             self.estimation_errors.append(pos - best_match.position)
-            self.estimation_pairs.append((type(best_match).__name__, pos, best_match.position))
+            self.estimation_pairs.append((best_match.name_str(), pos, best_match.position))
         # if obj_name in self.object_lists:
         #     self.object_lists[obj_name].append(obj)
         # else:
@@ -362,7 +545,7 @@ class WorldModel:
                 obj_index = [pair[0] for pair in self.recent_objects].index(obj)
                 if detected:
                     new_count = self.recent_objects[obj_index][1]+1
-                    obj_name = type(obj).__name__
+                    obj_name = obj.name_str()
                     # if the required number of cycles to admit an object is met, add it to both object_lists and objects_by_chunks
                     if new_count == CYCLES_TO_ADMIT_OBJECT:
                         if obj_name in self.object_lists:
@@ -398,7 +581,7 @@ class WorldModel:
                         if obj != self.hovering_object:
                             obj.cycles_to_be_deleted -= 1
                             if obj.cycles_to_be_deleted == 0:
-                                obj_name = type(obj).__name__
+                                obj_name = obj.name_str()
                                 obj_list = self.object_lists[obj_name]
                                 obj_index = obj_list.index(obj)
                                 del obj_list[obj_index]
@@ -423,8 +606,8 @@ class WorldModel:
             self.avg_observed_error = Point2d(0, 0)
         
         # mark current chunk as explored if applicable
-        player_chunk = self.point_to_chunk_index(self.player.position)
-        if self.decide_if_explored(self.player.position):
+        player_chunk = self.point_to_chunk_index(self.player.estimate_position_at_timestamp(self.yolo_timestamp))
+        if self.decide_if_explored(self.player.estimate_position_at_timestamp(self.yolo_timestamp)):
             self.explored_chunks.add(player_chunk)
 
     def get_closest_unexplored_chunk(self) -> tuple[int, int]:

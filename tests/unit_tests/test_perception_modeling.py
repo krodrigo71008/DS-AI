@@ -17,7 +17,8 @@ def run_perception_modeling_single_frame(input_image_path):
     # converting img from BGR to RGB
     img = img[:, :, ::-1]
     objects = perception.perceive(img)[0]
-    modeling.update_model(objects)
+    modeling.received_yolo_info = True
+    modeling.update_model_using_info(objects, None)
 
 def run_perception_modeling_multiple_frames(input_image_paths, expected_results=None):
     RECORDED_FPS = 30
@@ -50,7 +51,7 @@ def run_perception_modeling_multiple_frames(input_image_paths, expected_results=
 
     for image_path in input_image_paths:
         img = cv2.imread(image_path)
-        vis_screen.update_image(img)
+        vis_screen.update_yolo_image(img)
         # converting img from BGR to RGB
         img = img[:, :, ::-1]
         objects, classes, scores, boxes = perception.perceive(img)

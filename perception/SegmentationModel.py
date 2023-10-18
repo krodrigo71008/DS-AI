@@ -4,8 +4,7 @@ import mss
 import numpy as np
 import torch
 
-from perception.constants import SCREEN_SIZE, SCREEN_POS
-from utility.utility import hide_huds_numpy
+from perception.constants import SCREEN_SIZE, SCREEN_POS, SEGMENTATION_INPUT_SIZE
 
 mon = {"top": SCREEN_POS["top"], "left": SCREEN_POS["left"],
        "width": SCREEN_SIZE["width"], "height": SCREEN_SIZE["height"]}
@@ -25,6 +24,9 @@ class SegmentationModel:
         self.mean = np.array([0.485, 0.456, 0.406])
         self.std = np.array([0.229, 0.224, 0.225])
         self.input_range = [0, 1]
+        frame = self.get_screenshot()
+        self.process_frame(frame)
+        self.process_frame(frame)
 
     def preprocess_input(self, x):
         if x.max() > 1 and self.input_range[1] == 1:
@@ -45,16 +47,17 @@ class SegmentationModel:
             frame = self.preprocess_input(frame)
             frame = np.transpose(frame, (2, 0, 1))
             image = torch.from_numpy(frame.copy()).unsqueeze(0)
-            image = torch.nn.functional.interpolate(image, (512, 512)).to("cuda")
+            image = torch.nn.functional.interpolate(image, SEGMENTATION_INPUT_SIZE).to("cuda")
             image = image.float()
             result = self.model.forward(image)
         prediction = result.squeeze().cpu().numpy().round()
         prediction = np.transpose(prediction, axes=(1, 2, 0))
         prediction = prediction > self.CONFIDENCE_THRESHOLD
+        prediction = prediction.argmax(axis=2)
         
         return prediction
 
-    def perceive(self, frame : np.array = None):
+    def perceive(self, frame : np.array = None) -> np.array:
         # t1 = time.time()
         if frame is None:
             frame = self.get_screenshot() # takes like 30 ms avg
@@ -70,8 +73,8 @@ class SegmentationModel:
 
 class SegmentationRecorder(SegmentationModel):
     def __init__(self, debug=False, queue=None):
-        super().__init__(debug, queue)
         self.all_captured_images : list[np.array] = []
+        super().__init__(debug, queue)
 
     def get_screenshot(self):
         ans = super().get_screenshot()

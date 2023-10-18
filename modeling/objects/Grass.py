@@ -1,22 +1,23 @@
-import heapq
-import time
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from utility.GameTime import GameTime
-from utility.Point2d import Point2d
-from utility.Clock import Clock
+if TYPE_CHECKING:
+    from modeling.Scheduler import Scheduler
+    from utility.Point2d import Point2d
 
 GRASS_READY = 21
 GRASS_HARVESTED = 22
 
 
 class Grass(ObjectWithMultipleForms):
-    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, update_queue : list[float, int, int, str], clock: Clock):
-        super().__init__(False, position, latest_screen_position, [GRASS_READY, GRASS_HARVESTED], id_, update_queue, clock)
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler):
+        super().__init__(False, position, latest_screen_position, [GRASS_READY, GRASS_HARVESTED], id_, scheduler)
         if id_ == GRASS_HARVESTED:
-            heapq.heappush(update_queue, (clock.time_from_now(GameTime(non_winter_days=3)), time.time(), position, "grow", self))
+            scheduler.schedule_change(GameTime(non_winter_days=3), position, "grow", self)
 
-    def update(self, change):
+    def update(self, change : str):
         if change == "grow":
             self._state = GRASS_READY
 
@@ -33,7 +34,7 @@ class Grass(ObjectWithMultipleForms):
 
     def harvest(self):
         self._state = GRASS_HARVESTED
-        heapq.heappush(self.update_queue, (self.clock.time_from_now(GameTime(non_winter_days=3)), time.time(), self.position, "grow", self))
+        self.scheduler.schedule_change(GameTime(non_winter_days=3), self.position, "grow", self)
 
     def is_harvested(self) -> bool:
         return self._state == GRASS_HARVESTED

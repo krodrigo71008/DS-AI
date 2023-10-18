@@ -12,8 +12,11 @@ class ObjectModel:
     def __str__(self) -> str:
         return f"{type(self).__name__} at {self.position}"
 
+    def name_str(self) -> str:
+        raise NotImplementedError()
+
     def set_position(self, x : float, z : float):
         self.position = Point2d(x, z)
 
-    def update(self, change):
+    def update(self, change : str):
         raise NotImplementedError()

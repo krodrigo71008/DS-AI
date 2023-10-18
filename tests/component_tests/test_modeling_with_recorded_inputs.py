@@ -42,7 +42,7 @@ def try_out_modeling_with_recorded_inputs():
         with Image.open(file) as raw_image:
             img = np.asarray(raw_image)
             objects, classes, scores, boxes = perception.perceive(np.asarray(img))
-            vis_screen.update_image(img[:, :, ::-1])
+            vis_screen.update_yolo_image(img[:, :, ::-1])
             vis_screen.draw_detected_objects(classes, scores, boxes)
             modeling.update_model(objects)
             vis_screen.update_world_model(modeling)

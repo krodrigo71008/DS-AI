@@ -1,5 +1,6 @@
 import math
 from modeling.Inventory import Inventory
+from modeling.constants import TILE_SIZE
 from utility.Clock import Clock
 from utility.Point2d import Point2d
 from modeling.constants import PLAYER_BASE_SPEED
@@ -7,8 +8,9 @@ from modeling.constants import PLAYER_BASE_SPEED
 
 class PlayerModel:
     def __init__(self, clock : Clock):
-        self.position : Point2d = Point2d(0, 0)
-        self.position_before_correction : Point2d = Point2d(0, 0)
+        # since the player starts in the middle of a tile, to simplify things we set the player position to match the center of a tile
+        self.position : Point2d = Point2d(TILE_SIZE//2, TILE_SIZE//2)
+        self.position_before_correction : Point2d = Point2d(TILE_SIZE//2, TILE_SIZE//2)
         self.clock : Clock = clock
         self.inventory = Inventory()
         self.health = 150
@@ -51,3 +53,28 @@ class PlayerModel:
     def correct_error(self, err : Point2d) -> None:
         self.position_before_correction = self.position
         self.position -= err*self.CORRECTION_GAIN
+    
+    def estimate_position_at_timestamp(self, timestamp : float) -> Point2d:
+        """Estimate position at given timestamp, assuming speed stays constant and equal to the current speed
+
+        :param timestamp: timestamp to estimate position at
+        :type timestamp: float
+        :return: estimated position
+        :rtype: Point2d
+        """
+        if self.direction is None:
+            return self.position
+        dt = timestamp - self.clock.raw_timestamp()
+        return self.position + Point2d(math.cos(self.direction), math.sin(self.direction))*dt*self.speed
+
+
+class PlayerModelRecorder(PlayerModel):
+    def __init__(self, clock : Clock):
+        super().__init__(clock)
+        self.all_direction_changes : list[float] = []
+        self.all_direction_changes_timestamps : list[float] = []
+
+    def set_direction(self, direction : float) -> None:
+        self.all_direction_changes.append(direction)
+        self.all_direction_changes_timestamps.append(self.clock.raw_timestamp())
+        super().set_direction(direction)
