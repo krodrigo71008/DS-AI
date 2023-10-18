@@ -7,7 +7,16 @@ class ObjectModel:
         self.pickable = pickable
         self.position = position
         self.latest_screen_position = latest_screen_position
-        self.cycles_to_be_deleted = CYCLES_FOR_OBJECT_REMOVAL
+        self._cycles_to_be_deleted = CYCLES_FOR_OBJECT_REMOVAL
+
+    def reset_cycles_to_be_deleted(self) -> None:
+        self._cycles_to_be_deleted = CYCLES_FOR_OBJECT_REMOVAL
+    
+    def countdown_cycles_to_be_deleted(self) -> None:
+        self._cycles_to_be_deleted -= 1
+
+    def get_cycles_to_be_deleted(self) -> int:
+        return self._cycles_to_be_deleted
 
     def __str__(self) -> str:
         return f"{type(self).__name__} at {self.position}"

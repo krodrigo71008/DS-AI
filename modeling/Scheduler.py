@@ -31,3 +31,13 @@ class Scheduler:
     
     def schedule_change(self, time_from_now : GameTime, position : Point2d, change : str, instance : ObjectModel):
         heapq.heappush(self.update_queue, (self.clock.time_from_now(time_from_now), time.time(), position, change, instance))
+
+class SchedulerMock(Scheduler):
+    def __init__(self, clock : Clock, world_model : WorldModel):
+        super().__init__(clock, world_model)
+        
+    def update(self) -> None:
+        pass
+    
+    def schedule_change(self, time_from_now : GameTime, position : Point2d, change : str, instance : ObjectModel):
+        pass

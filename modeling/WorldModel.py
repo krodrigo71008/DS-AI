@@ -569,7 +569,7 @@ class WorldModel:
             # many cycles in a row)
             else:
                 if detected:
-                    obj.cycles_to_be_deleted = CYCLES_FOR_OBJECT_REMOVAL
+                    obj.reset_cycles_to_be_deleted()
                 else:
                     # we make it so that objects on the screen border aren't deleted if they aren't seen for a while
                     # since they often are offscreen or blocked by HUD
@@ -579,8 +579,8 @@ class WorldModel:
                                                     self.c4_deletion_border], obj.position):
                         # we shouldn't count down an object for deletion if we're hovering over it
                         if obj != self.hovering_object:
-                            obj.cycles_to_be_deleted -= 1
-                            if obj.cycles_to_be_deleted == 0:
+                            obj.countdown_cycles_to_be_deleted()
+                            if obj.get_cycles_to_be_deleted() == 0:
                                 obj_name = obj.name_str()
                                 obj_list = self.object_lists[obj_name]
                                 obj_index = obj_list.index(obj)

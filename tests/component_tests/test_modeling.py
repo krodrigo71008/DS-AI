@@ -6,13 +6,14 @@ from PIL import Image
 
 from modeling.objects.Grass import GRASS_HARVESTED, GRASS_READY, Grass
 from modeling.objects.Sapling import SAPLING_HARVESTED, SAPLING_READY, Sapling
-from perception.ImageObject import ImageObject
 from modeling.Modeling import Modeling
 from modeling.PlayerModel import PlayerModel
 from modeling.WorldModel import WorldModel
 from modeling.constants import CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV, DISTANCE_FOR_SAME_OBJECT, CHUNK_SIZE
+from modeling.Scheduler import SchedulerMock
 from perception.constants import SCREEN_SIZE
 from perception.YoloIdConverter import yolo_id_converter
+from perception.ImageObject import ImageObject
 from utility.Clock import Clock
 from utility.Point2d import Point2d
 
@@ -215,12 +216,12 @@ def test_modeling_object_input_filtering(test_case):
 def aux_modeling_object_input_filtering(test_case):
     width = SCREEN_SIZE["width"]
     height = SCREEN_SIZE["height"]
-    # reminder: bbs are x, y, width, height
-    bounding_boxes = [(0, 0, width*0.1, height*0.1), 
-                        (width*0.4, height*0.1, width*0.2, height*0.2),
-                        (width*0.1, height*0.4, width*0.2, height*0.2),
-                        (width*0.8, height*0.8, width*0.1, height*0.2),
-                        (0, height*0.6, width*0.2, height*0.1)]
+    # reminder: bbs are center x, center y, width, height
+    bounding_boxes = [(width*0.05, height*0.05, width*0.1, height*0.1), 
+                        (width*0.3, height*0.15, width*0.1, height*0.1),
+                        (width*0.15, height*0.3, width*0.1, height*0.2),
+                        (width*0.45, height*0.5, width*0.7, height*0.6),
+                        (width*0.1, height*0.35, width*0.2, height*0.5)]
     with open("perception/darknet/obj.names") as file:
         lines = [line.strip() for line in file.readlines()]
         grass_id = lines.index("grass")
@@ -233,9 +234,13 @@ def aux_modeling_object_input_filtering(test_case):
         modeling = Modeling(clock=Clock())
         for input_ in input_sequence:
             if input_ == 1:
-                modeling.update_model([obj])
+                modeling.received_yolo_info = True
+                modeling.received_segmentation_info = False
+                modeling.update_model_using_info([obj], None)
             else:
-                modeling.update_model([])
+                modeling.received_yolo_info = True
+                modeling.received_segmentation_info = False
+                modeling.update_model_using_info([], None)
         if len(modeling.world_model.object_lists) > 0 and not expected:
             return False
         elif len(modeling.world_model.object_lists) == 0 and expected:
@@ -262,12 +267,12 @@ def test_modeling_object_deletion(test_case):
 def aux_modeling_object_deletion(test_case):
     width = SCREEN_SIZE["width"]
     height = SCREEN_SIZE["height"]
-    # reminder: bbs are x, y, width, height
-    bounding_boxes = [(0, 0, width*0.1, height*0.1), 
-                        (width*0.4, height*0.1, width*0.2, height*0.2),
-                        (width*0.1, height*0.4, width*0.2, height*0.2),
-                        (width*0.8, height*0.7, width*0.1, height*0.15),
-                        (0, height*0.6, width*0.2, height*0.1)]
+    # reminder: bbs are center x, center y, width, height
+    bounding_boxes = [(width*0.05, height*0.05, width*0.1, height*0.1), 
+                        (width*0.3, height*0.15, width*0.1, height*0.1),
+                        (width*0.15, height*0.3, width*0.1, height*0.2),
+                        (width*0.45, height*0.5, width*0.7, height*0.6),
+                        (width*0.1, height*0.35, width*0.2, height*0.5)]
     with open("perception/darknet/obj.names") as file:
         lines = [line.strip() for line in file.readlines()]
         grass_id = lines.index("grass")
@@ -278,14 +283,21 @@ def aux_modeling_object_deletion(test_case):
     input_sequence, expected = test_case
     for i, obj in enumerate(objects):
         modeling = Modeling(clock=Clock())
-        modeling.update_model([obj])
-        modeling.update_model([obj])
-        modeling.update_model([obj])
+        modeling.received_yolo_info = True
+        modeling.received_segmentation_info = False
+        # these three detections server to admit the object to the world model
+        modeling.update_model_using_info([obj], None)
+        modeling.update_model_using_info([obj], None)
+        modeling.update_model_using_info([obj], None)
         for input_ in input_sequence:
             if input_ == 1:
-                modeling.update_model([obj])
+                modeling.received_yolo_info = True
+                modeling.received_segmentation_info = False
+                modeling.update_model_using_info([obj], None)
             else:
-                modeling.update_model([])
+                modeling.received_yolo_info = True
+                modeling.received_segmentation_info = False
+                modeling.update_model_using_info([], None)
         total_obj_list_len = 0
         for _, obj_list in modeling.world_model.object_lists.items():
             total_obj_list_len += len(obj_list)
@@ -311,15 +323,16 @@ def aux_modeling_object_deletion(test_case):
 
 def test_world_model_filtering():
     world_model = WorldModel(PlayerModel(Clock()), Clock())
-    sap1 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, lambda x,y,z : None)
-    sap2 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, lambda x,y,z : None)
-    sap3 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, lambda x,y,z : None)
-    sap4 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_HARVESTED, lambda x,y,z : None)
+    scheduler = SchedulerMock(Clock(), world_model)
+    sap1 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, scheduler)
+    sap2 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, scheduler)
+    sap3 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, scheduler)
+    sap4 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_HARVESTED, scheduler)
     world_model.object_lists["Sapling"] = [sap1, sap2, sap3, sap4]
-    gr1 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_READY, lambda x,y,z : None)
-    gr2 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_READY, lambda x,y,z : None)
-    gr3 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_HARVESTED, lambda x,y,z : None)
-    gr4 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_HARVESTED, lambda x,y,z : None)
+    gr1 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_READY, scheduler)
+    gr2 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_READY, scheduler)
+    gr3 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_HARVESTED, scheduler)
+    gr4 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_HARVESTED, scheduler)
     world_model.object_lists["Grass"] = [gr1, gr2, gr3, gr4]
     results = world_model.get_all_of(["Grass", "Sapling"], "only_not_harvested")
     assert len(results["Grass"]) == 2
