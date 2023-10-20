@@ -1,4 +1,4 @@
-from utility.utility import lines_cross, is_inside_convex_polygon
+from utility.utility import lines_cross, is_inside_convex_polygon, get_multiples_in_range, iou
 from utility.Point2d import Point2d
 
 def test_lines_cross():
@@ -47,3 +47,14 @@ def test_is_inside_convex_polygon():
     ]
     for test_case in test_cases:
         assert is_inside_convex_polygon(test_case[0], test_case[1]) == test_case[2]
+
+def test_get_multiples_in_range():
+    assert get_multiples_in_range(5, [11, 29]) == [15, 20, 25]
+    assert get_multiples_in_range(5, [10, 30]) == [10, 15, 20, 25, 30]
+    assert get_multiples_in_range(7, [10, 27]) == [14, 21]
+
+def test_iou():
+    assert abs(iou([100, 100, 200, 200], [100, 100, 200, 200]) - 1.0) < 1e-4
+    assert abs(iou([100, 100, 200, 200], [100, 100, 100, 200]) - 0.5) < 1e-4
+    assert abs(iou([100, 100, 200, 200], [100, 100, 100, 100]) - 0.25) < 1e-4
+    assert abs(iou([100, 100, 200, 200], [300, 300, 100, 200]) - 0.0) < 1e-4

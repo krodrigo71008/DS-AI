@@ -59,7 +59,7 @@ class Clock:
 
         :param time_delta: how much time in the future
         :type time_delta: GameTime
-        :return: 'timestamp' representing the 
+        :return: 'timestamp' representing the requested time
         :rtype: float
         """
         if time_delta.exclude_winter:
@@ -114,6 +114,13 @@ class Clock:
 
 class ClockMock(Clock):
     def __init__(self, times_to_return : np.array):
+        """A Clock implementation that returns preset times instead of the real times
+
+        :param times_to_return: [0] is start time, [1] is _last_time, [2] onwards is times_to_return
+        :type times_to_return: np.array
+        :return: ClockMock instance
+        :rtype: ClockMock
+        """
         start_time = times_to_return[0]
         super().__init__(start_time)
         self.times_to_return = times_to_return

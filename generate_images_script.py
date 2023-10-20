@@ -22,7 +22,7 @@ if __name__ == "__main__":
     id_to_image_paths = {} # image_id maps to an array with image_paths
     all_important_folders = []
     for i in range(obj_info.shape[0]):
-        id_to_image_paths[i] = []
+        aux = []
         folders = [s.strip()[1:-1] for s in obj_info["image_paths"].iloc[i][1:-1].split(",")]
         for folder_str in folders:
             combo_aux = []
@@ -32,14 +32,16 @@ if __name__ == "__main__":
                 imgs_path = f"perception/ds_sprites_processed/{folder}/Output/images"
                 combo_aux.append([f"{imgs_path}/{file}" for file in os.listdir(imgs_path)])
             combos = list(itertools.product(*combo_aux))
-            id_to_image_paths[i].extend(["+".join(tuple(str(item) for item in c)) for c in combos])
+            aux.extend(["+".join(tuple(str(item) for item in c)) for c in combos])
         # important_max_image_count is the max number of sprites (or sprite combos) associated with a single class
         if i in yolo_id_converter.important_classes:
-            if important_max_image_count == -1 or len(id_to_image_paths[i]) > important_max_image_count:
-                important_max_image_count = len(id_to_image_paths[i])
+            if important_max_image_count == -1 or len(aux) > important_max_image_count:
+                important_max_image_count = len(aux)
         else:
-            if not_important_max_image_count == -1 or len(id_to_image_paths[i]) > not_important_max_image_count:
-                not_important_max_image_count = len(id_to_image_paths[i])
+            if not_important_max_image_count == -1 or len(aux) > not_important_max_image_count:
+                not_important_max_image_count = len(aux)
+        if len(aux) > 0:
+            id_to_image_paths[i] = aux
 
 
     annotations_per_important_object = int(important_max_image_count*MINIMUM_IMAGE_USAGE)

@@ -51,16 +51,24 @@ class GameTime:
             return None
 
     def __add__(self, other):
-        return GameTime(seconds=self.seconds() + other.seconds())
+        aux = GameTime(seconds=self.seconds() + other.seconds())
+        aux.exclude_winter = self.exclude_winter
+        return aux
 
     def __sub__(self, other):
-        return GameTime(seconds=self.seconds()-other.seconds())
+        aux = GameTime(seconds=self.seconds() - other.seconds())
+        aux.exclude_winter = self.exclude_winter
+        return aux
 
     def __mul__(self, number):
-        return GameTime(seconds=self.seconds()*number)
+        aux = GameTime(seconds=self.seconds() * number)
+        aux.exclude_winter = self.exclude_winter
+        return aux
 
     def __truediv__(self, number):
-        return GameTime(seconds=self.seconds()/number)
+        aux = GameTime(seconds=self.seconds() / number)
+        aux.exclude_winter = self.exclude_winter
+        return aux
 
     def __le__(self, other):
         return self.seconds() <= other.seconds()

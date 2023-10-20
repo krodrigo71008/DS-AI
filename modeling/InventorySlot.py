@@ -62,3 +62,4 @@ class InventorySlot:
     def no_durability(self) -> None:
         # note to remember that things like lantern don't break with 0 durability, but for now this is fine
         self.object = None
+        self.count = 0

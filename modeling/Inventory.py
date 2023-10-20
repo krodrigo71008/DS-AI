@@ -356,7 +356,7 @@ class Inventory:
         """
         if equip_slot.position not in ["Head", "Body", "Hand"]:
             raise ValueError("equip_slot is not an equipment slot!")
-        if other_slot.position not in ["Head", "Body", "Hand"]:
+        if other_slot.position in ["Head", "Body", "Hand"]:
             raise ValueError("other_slot is an equipment slot!")
         if other_slot.get_slot_info() is not None:
             if equip_slot.position == "Head":
@@ -404,7 +404,7 @@ class Inventory:
     def get_inventory_slots(self) -> dict:
         """Get inventory slots
 
-        :return: inventory slots and items equipped on head, bosy and hand slots
+        :return: inventory slots and items equipped on head, body and hand slots
         :rtype: dict
         """
         return self.slots

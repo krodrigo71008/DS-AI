@@ -266,11 +266,6 @@ class Visualizer:
         x = (x2 - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
         y = (x1 - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
         return x, y
-
-    def convert_world_coords_to_world_graph(self, x1, x2, x1_range, x2_range):
-        x = (x2 - x2_range[0])/self.CLOSE_OBJECTS_X2*self.WORLD_CANVAS_WIDTH
-        y = (x1 - x1_range[0])/self.CLOSE_OBJECTS_X1*self.WORLD_CANVAS_HEIGHT
-        return x, y
     
     def draw_chunk_lines_world_canvas(self, chunk_size, x1_range, x2_range):
         x1_lines = get_multiples_in_range(chunk_size, x1_range)

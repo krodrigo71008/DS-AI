@@ -1,6 +1,10 @@
+import random
+
 import pytest
 
 from modeling.Inventory import Inventory
+from modeling.ObjectsInfo import objects_info
+from utility.GameTime import GameTime
 
 add_objects_test_cases = [
     ([], {
@@ -167,7 +171,7 @@ add_objects_test_cases = [
 
 @pytest.mark.parametrize("test_case", add_objects_test_cases)
 def test_add_objects(test_case):
-    # test_case[0] is [(obj, count)]
+    # test_case[0] is [(obj, count)] to be added to the inventory
     # test_case[1] is expected result
     inv = Inventory()
     if len(test_case[0]) > 0:
@@ -659,3 +663,81 @@ def test_equipping_unequipping(test_case):
             assert test_case[1][slot_name][0] is not None
             assert cur_slots[slot_name].object.name == test_case[1][slot_name][0]
             assert cur_slots[slot_name].count == test_case[1][slot_name][1]
+
+get_count_test_cases = [
+    ([], 
+        (["CutGrass"], [0])
+    ),
+    ([], 
+        (["CutGrass", "Twigs"], [0, 0])
+    ),
+    ([("CutGrass", 3)],
+        (["CutGrass"], [3])
+    ),
+    ([("CutGrass", 39), ("CutGrass", 39)],
+        (["CutGrass"], [78])
+    ),
+    ([("Axe", 1)],
+        (["Axe"], [1])
+    ),
+    ([("Axe", 1), ("Axe", 1)],
+        (["Axe"], [2])
+    ),
+    ([("Axe", 1), ("CutGrass", 1), ("Axe", 1)],
+        (["Axe", "CutGrass"], [2, 1])
+    ),
+    ([("Axe", 1), ("CutGrass", 40), ("CutGrass", 40), ("Axe", 1)],
+        (["Axe", "CutGrass"], [2, 80])
+    ),
+    ([("Twigs", 1), ("CutGrass", 40), ("CutGrass", 40), ("Twigs", 1)],
+        (["Twigs", "CutGrass"], [2, 80])
+    ),
+]
+
+@pytest.mark.parametrize("test_case", get_count_test_cases)
+def test_get_inventory_count(test_case):
+    # test_case[0] is [(obj, count)] to add to the inventory
+    # test_case[1] is (obj_list, count_list) to query
+    inv = Inventory()
+    if len(test_case[0]) > 0:
+        for obj, count in test_case[0]:
+            inv.add_item(obj, count)
+    
+    obj_list, count_list = test_case[1]
+    assert inv.get_inventory_count(obj_list) == count_list
+
+def test_equipment_update():
+    torch_time = objects_info.get_item_info(info="use_time", name="Torch").seconds()
+    inv = Inventory()
+    inv.add_item("Torch", 1)
+    inv.add_item("Torch", 1)
+    # 1 torch on hand slot, 1 on slot 0
+    inv_contents = inv.get_inventory_slots()
+    assert (inv_contents["Hand"].object.name, inv_contents["Hand"].count) == ("Torch", 1)
+    assert (inv_contents[0].object.name, inv_contents[0].count) == ("Torch", 1)
+    inv.update(torch_time)
+    inv_contents = inv.get_inventory_slots()
+    assert (inv_contents["Hand"].object.name, inv_contents["Hand"].count) == ("Torch", 1)
+    assert (inv_contents[0].object, inv_contents[0].count) == (None, 0)
+    inv.update(torch_time)
+    inv_contents = inv.get_inventory_slots()
+    assert (inv_contents["Hand"].object, inv_contents["Hand"].count) == (None, 0)
+    assert (inv_contents[0].object, inv_contents[0].count) == (None, 0)
+
+def test_slot_update():
+    random.seed(727)
+    for _ in range(10):
+        food_name, food_info = random.choice([t for t in objects_info._food_values.items()])
+        spoil_time = GameTime(days=food_info[3]).seconds()
+        count = random.randint(1, 5)
+        inv = Inventory()
+        inv.add_item(food_name, count)
+        # food on slot 0
+        inv_contents = inv.get_inventory_slots()
+        assert (inv_contents[0].object.name, inv_contents[0].count) == (food_name, count)
+        inv.update(spoil_time-1)
+        inv_contents = inv.get_inventory_slots()
+        assert (inv_contents[0].object.name, inv_contents[0].count) == (food_name, count)
+        inv.update(1)
+        inv_contents = inv.get_inventory_slots()
+        assert (inv_contents[0].object.name, inv_contents[0].count) == ("Rot", count)

@@ -204,7 +204,7 @@ def get_multiples_in_range(number : int, range_ : tuple[int, int]) -> list[int]:
     if aux_ < range_[0]:
         aux_ += number
     ans = []
-    while aux_ < range_[1]:
+    while aux_ <= range_[1]:
         ans.append(aux_)
         aux_ += number
     return ans

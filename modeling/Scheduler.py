@@ -19,7 +19,7 @@ class Scheduler:
     
     def update(self) -> None:
         # the [0] gets the 'timestamp' in which the change should happen
-        while len(self.update_queue) > 0 and self.update_queue[0][0] < self.clock.time():
+        while len(self.update_queue) > 0 and self.update_queue[0][0] <= self.clock.time():
             tup = heapq.heappop(self.update_queue)
             pos = tup[2]
             change = tup[3]

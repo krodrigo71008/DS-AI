@@ -8,7 +8,6 @@ from perception.ImageObject import ImageObject
 from modeling.WorldModel import WorldModel
 from modeling.PlayerModel import PlayerModel, PlayerModelRecorder
 from modeling.ObjectsInfo import objects_info
-from modeling.constants import CAMERA_DISTANCE, CAMERA_HEADING, CAMERA_PITCH, FOV
 from utility.Clock import Clock
 from utility.Point2d import Point2d
 
@@ -62,7 +61,7 @@ class Modeling:
             player_positions = [Point2d.bottom_from_box(obj.box) for obj in obj_list if objects_info.get_item_info(image_id=obj.id, info="object_type") == "PLAYER"]
             # decide which of the detected player positions is the real one
             self.world_model.decide_player_position(player_positions)
-            self.world_model.start_cycle(CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+            self.world_model.start_cycle()
             for obj in obj_list:
                 if objects_info.get_item_info(image_id=obj.id, info="object_type") == "OBJECT":
                     self.world_model.object_detected(obj)

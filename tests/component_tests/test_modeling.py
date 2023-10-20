@@ -1,4 +1,5 @@
 import math
+import random
 
 import numpy as np
 import pytest
@@ -9,7 +10,8 @@ from modeling.objects.Sapling import SAPLING_HARVESTED, SAPLING_READY, Sapling
 from modeling.Modeling import Modeling
 from modeling.PlayerModel import PlayerModel
 from modeling.WorldModel import WorldModel
-from modeling.constants import CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV, DISTANCE_FOR_SAME_OBJECT, CHUNK_SIZE
+from modeling.constants import CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV
+from modeling.constants import DISTANCE_FOR_SAME_OBJECT, CHUNK_SIZE, CYCLES_TO_ADMIT_OBJECT, DISTANCE_FOR_VALID_PLAYER_POSITION
 from modeling.Scheduler import SchedulerMock
 from perception.constants import SCREEN_SIZE
 from perception.YoloIdConverter import yolo_id_converter
@@ -338,6 +340,80 @@ def test_world_model_filtering():
     assert len(results["Grass"]) == 2
     assert len(results["Sapling"]) == 3
 
+def test_distance_for_same_object():
+    modeling = Modeling()
+    sapling_image = ImageObject(SAPLING_READY, 1, [SCREEN_SIZE["width"]//2, SCREEN_SIZE["height"]//2, SCREEN_SIZE["width"]*0.2, SCREEN_SIZE["height"]*0.2])
+    sapling = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_HARVESTED, modeling.world_model.scheduler)
+    modeling.world_model.add_object(sapling)
+
+    random.seed(727)
+    for _ in range(20):
+        angle = random.randint(0, 359)
+        pos = Point2d(DISTANCE_FOR_SAME_OBJECT, 0)
+        pos = pos.rotate_degrees(angle)
+        modeling.world_model.start_cycle()
+        modeling.world_model.handle_object_at_position(sapling_image, pos)
+        modeling.world_model.finish_cycle()
+    
+    assert len(modeling.world_model.object_lists["Sapling"]) == 1
+    
+    angle = random.randint(0, 359)
+    pos = Point2d(DISTANCE_FOR_SAME_OBJECT+0.1, 0)
+    pos = pos.rotate_degrees(angle)
+    for _ in range(CYCLES_TO_ADMIT_OBJECT):
+        modeling.world_model.start_cycle()
+        modeling.world_model.handle_object_at_position(sapling_image, pos)
+        modeling.world_model.finish_cycle()
+    
+    assert len(modeling.world_model.object_lists["Sapling"]) == 2
+
+def test_player_choice_algorithm():
+    modeling = Modeling()
+
+    random.seed(727)
+    possible_positions = []
+    for _ in range(20):
+        angle = random.randint(0, 359)
+        pos = Point2d(DISTANCE_FOR_VALID_PLAYER_POSITION+0.1, 0)
+        pos = pos.rotate_degrees(angle) + Point2d(SCREEN_SIZE["width"]//2, SCREEN_SIZE["height"]//2)
+        possible_positions.append(pos)
+
+    modeling.world_model.decide_player_position(possible_positions)
+    assert modeling.world_model.latest_detected_player_position is None
+    
+    modeling = Modeling()
+    possible_positions = []
+    best = None
+    best_distance = None
+    for _ in range(20):
+        distance = random.random()*DISTANCE_FOR_VALID_PLAYER_POSITION
+        angle = random.randint(0, 359)
+        pos = Point2d(distance, 0)
+        pos = pos.rotate_degrees(angle) + Point2d(SCREEN_SIZE["width"]//2, SCREEN_SIZE["height"]//2)
+        if best_distance is None or distance < best_distance:
+            best = pos
+            best_distance = distance
+        possible_positions.append(pos)
+    
+    modeling.world_model.decide_player_position(possible_positions)
+    assert modeling.world_model.latest_detected_player_position == best
+
+def try_out_warp_perspective(image_path: str):
+    clock = Clock()
+    player = PlayerModel(clock)
+    world = WorldModel(player, clock)
+    image = Image.open(image_path).resize((512, 512))
+    res = world.warp_image_to_ground(np.asarray(image), CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+    Image.fromarray(res).save("warped_test.jpg")
+    return res
+
+def try_out_process_segmentation_image(segmentation_array: np.array):
+    clock = Clock()
+    player = PlayerModel(clock)
+    world = WorldModel(player, clock)
+    world.process_segmentation_image(segmentation_array)
+
+
 # start 32
 # im1 = 119 -> 8.6 from left
 # start back 294
@@ -371,18 +447,3 @@ def test_world_model_filtering():
 # im3 -> (960, 671)
 # im4 -> (960, 671)
 # im5 -> (960, 550)
-
-def try_out_warp_perspective(image_path: str):
-    clock = Clock()
-    player = PlayerModel(clock)
-    world = WorldModel(player, clock)
-    image = Image.open(image_path).resize((512, 512))
-    res = world.warp_image_to_ground(np.asarray(image), CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
-    Image.fromarray(res).save("warped_test.jpg")
-    return res
-
-def try_out_process_segmentation_image(segmentation_array: np.array):
-    clock = Clock()
-    player = PlayerModel(clock)
-    world = WorldModel(player, clock)
-    world.process_segmentation_image(segmentation_array)

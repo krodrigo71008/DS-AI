@@ -64,4 +64,15 @@ class Evergreen(ObjectWithMultipleForms):
             raise Exception("Invalid id!")
         self._state = state
 
+    def is_small(self):
+        return self._state == EVERGREEN_SMALL
+
+    def is_medium(self):
+        return self._state == EVERGREEN_MEDIUM
+
+    def is_big(self):
+        return self._state == EVERGREEN_BIG
+
+    def is_dead(self):
+        return self._state == EVERGREEN_DEAD
 

@@ -307,21 +307,21 @@ class WorldModel:
         cur = self.point_to_chunk_index(p)
         chunk_pos = self.coords_to_chunk_coords(p)
         required = []
-        if chunk_pos.x1 < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.x1 <= DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]-1, cur[1]))
-        elif chunk_pos.x1 > CHUNK_SIZE - DISTANCE_FOR_SAME_OBJECT:
+        elif chunk_pos.x1 >= CHUNK_SIZE - DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]+1, cur[1]))
-        if chunk_pos.x2 < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.x2 <= DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0], cur[1]-1))
-        elif chunk_pos.x2 > CHUNK_SIZE - DISTANCE_FOR_SAME_OBJECT:
+        elif chunk_pos.x2 >= CHUNK_SIZE - DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0], cur[1]+1))
-        if chunk_pos.distance(Point2d(0, 0)) < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.distance(Point2d(0, 0)) <= DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]-1, cur[1]-1))
-        if chunk_pos.distance(Point2d(0, CHUNK_SIZE)) < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.distance(Point2d(0, CHUNK_SIZE)) <= DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]-1, cur[1]+1))
-        if chunk_pos.distance(Point2d(CHUNK_SIZE, 0)) < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.distance(Point2d(CHUNK_SIZE, 0)) <= DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]+1, cur[1]-1))
-        if chunk_pos.distance(Point2d(CHUNK_SIZE, CHUNK_SIZE)) < DISTANCE_FOR_SAME_OBJECT:
+        if chunk_pos.distance(Point2d(CHUNK_SIZE, CHUNK_SIZE)) <= DISTANCE_FOR_SAME_OBJECT:
             required.append((cur[0]+1, cur[1]+1))
         return required
 
@@ -345,7 +345,7 @@ class WorldModel:
         for possibility in player_positions:
             # if the detected player is that far from the center of the screen, it's a false positive
             distance_to_center = possibility.distance(Point2d(SCREEN_SIZE["width"]//2, SCREEN_SIZE["height"]//2))
-            if distance_to_center < DISTANCE_FOR_VALID_PLAYER_POSITION:
+            if distance_to_center <= DISTANCE_FOR_VALID_PLAYER_POSITION:
                 if player_pos is None:
                     player_pos = possibility
                     best_distance = distance_to_center
@@ -358,7 +358,8 @@ class WorldModel:
             self.cycles_since_player_detected = 0
 
 
-    def start_cycle(self, heading : float, pitch : float, distance : float, fov : float) -> None:
+    def start_cycle(self, heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, 
+                    distance : float = CAMERA_DISTANCE, fov : float = FOV) -> None:
         """Updates origin position and sets objects that should be detected
         :param heading: camera heading
         :type heading: float
@@ -469,6 +470,10 @@ class WorldModel:
         pos = self.local_to_global_position(
             Point2d.bottom_from_box(image_obj.box),
             CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+        self.handle_object_at_position(image_obj, pos)
+    
+
+    def handle_object_at_position(self, image_obj : ImageObject, pos : Point2d):
         obj_name = objects_info.get_item_info(info="name", image_id=image_obj.id)
         required_chunks = [self.point_to_chunk_index(pos)]
         adj_required_chunks = self.required_nearby_chunks(pos)
@@ -485,7 +490,7 @@ class WorldModel:
         lowest_distance : float = None
         for obj in objects_to_analyze:
             # if the object is close enough to an already detected object of the same type
-            if pos.distance(obj.position) < DISTANCE_FOR_SAME_OBJECT and obj.name_str() == obj_name:
+            if pos.distance(obj.position) <= DISTANCE_FOR_SAME_OBJECT and obj.name_str() == obj_name:
                 if best_match is None or obj.position.distance(pos) < lowest_distance:
                     best_match = obj
                     lowest_distance = obj.position.distance(pos)
@@ -545,19 +550,10 @@ class WorldModel:
                 obj_index = [pair[0] for pair in self.recent_objects].index(obj)
                 if detected:
                     new_count = self.recent_objects[obj_index][1]+1
-                    obj_name = obj.name_str()
                     # if the required number of cycles to admit an object is met, add it to both object_lists and objects_by_chunks
                     if new_count == CYCLES_TO_ADMIT_OBJECT:
-                        if obj_name in self.object_lists:
-                            self.object_lists[obj_name].append(obj)
-                        else:
-                            self.object_lists[obj_name] = [obj]
-                        pos = obj.position
-                        if self.point_to_chunk_index(pos) in self.objects_by_chunks:
-                            self.objects_by_chunks[self.point_to_chunk_index(pos)].append(obj)
-                        else:
-                            self.objects_by_chunks[self.point_to_chunk_index(pos)] = [obj]
-                        # also remove it
+                        self.add_object(obj)
+                        # also remove it from recent objects
                         del self.recent_objects[obj_index]
                     else:
                         # update the cycle count for the object
@@ -671,10 +667,54 @@ class WorldModel:
                     if filter_ == "only_not_harvested":
                         res_aux = []
                         for obj_aux in self.object_lists[obj]:
-                            # if the object doesn't have the is_harvested method, we can choose it
+                            # if the object has the is_harvested method, we can choose it
                             op = getattr(obj_aux, "is_harvested", None)
                             if callable(op):
                                 if not obj_aux.is_harvested():
+                                    res_aux.append(obj_aux)
+                            else:
+                                res_aux.append(obj_aux)
+                        result[obj] = res_aux
+                    elif filter_ == "evergreen_small":
+                        res_aux = []
+                        for obj_aux in self.object_lists[obj]:
+                            # if the object has the is_small method, we can choose it
+                            op = getattr(obj_aux, "is_small", None)
+                            if callable(op):
+                                if obj_aux.is_small():
+                                    res_aux.append(obj_aux)
+                            else:
+                                res_aux.append(obj_aux)
+                        result[obj] = res_aux
+                    elif filter_ == "evergreen_medium":
+                        res_aux = []
+                        for obj_aux in self.object_lists[obj]:
+                            # if the object has the is_medium method, we can choose it
+                            op = getattr(obj_aux, "is_medium", None)
+                            if callable(op):
+                                if obj_aux.is_medium():
+                                    res_aux.append(obj_aux)
+                            else:
+                                res_aux.append(obj_aux)
+                        result[obj] = res_aux
+                    elif filter_ == "evergreen_big":
+                        res_aux = []
+                        for obj_aux in self.object_lists[obj]:
+                            # if the object has the is_big method, we can choose it
+                            op = getattr(obj_aux, "is_big", None)
+                            if callable(op):
+                                if obj_aux.is_big():
+                                    res_aux.append(obj_aux)
+                            else:
+                                res_aux.append(obj_aux)
+                        result[obj] = res_aux
+                    elif filter_ == "evergreen_dead":
+                        res_aux = []
+                        for obj_aux in self.object_lists[obj]:
+                            # if the object has the is_dead method, we can choose it
+                            op = getattr(obj_aux, "is_dead", None)
+                            if callable(op):
+                                if obj_aux.is_dead():
                                     res_aux.append(obj_aux)
                             else:
                                 res_aux.append(obj_aux)
@@ -684,3 +724,20 @@ class WorldModel:
             else:
                 result[obj] = []
         return result
+    
+    def add_object(self, obj : ObjectModel) -> None:
+        """Add object to world model
+
+        :param obj: object to be added
+        :type obj: ObjectModel
+        """
+        obj_name = obj.name_str()
+        if obj_name in self.object_lists:
+            self.object_lists[obj_name].append(obj)
+        else:
+            self.object_lists[obj_name] = [obj]
+        pos = obj.position
+        if self.point_to_chunk_index(pos) in self.objects_by_chunks:
+            self.objects_by_chunks[self.point_to_chunk_index(pos)].append(obj)
+        else:
+            self.objects_by_chunks[self.point_to_chunk_index(pos)] = [obj]
