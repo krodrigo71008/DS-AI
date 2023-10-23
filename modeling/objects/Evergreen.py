@@ -14,7 +14,7 @@ EVERGREEN_DEAD = 57
 
 
 class Evergreen(ObjectWithMultipleForms):
-    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler):
+    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler, lumpy : bool):
         super().__init__(False, position, latest_screen_position,
                          [EVERGREEN_SMALL, EVERGREEN_MEDIUM, EVERGREEN_BIG, EVERGREEN_DEAD], id_, scheduler)
         # times are random, 1*5-2*5, 3*5-7*5, 3*5-7*5 and 0.5*5-1.5*5, but I'm using the maximum value
@@ -26,18 +26,19 @@ class Evergreen(ObjectWithMultipleForms):
             scheduler.schedule_change(GameTime(minutes=7*5), position, "growToDead", self)
         else:
             scheduler.schedule_change(GameTime(minutes=1.5*5), position, "growToSmall", self)
+        self.lumpy = lumpy
 
     def update(self, change : str):
         if change == "growToSmall":
             self._state = EVERGREEN_SMALL
             self.scheduler.schedule_change(GameTime(minutes=2*5), self.position, "growToMedium", self)
-        if change == "growToMedium":
+        elif change == "growToMedium":
             self._state = EVERGREEN_MEDIUM
             self.scheduler.schedule_change(GameTime(minutes=7*5), self.position, "growToBig", self)
-        if change == "growToBig":
+        elif change == "growToBig":
             self._state = EVERGREEN_BIG
             self.scheduler.schedule_change(GameTime(minutes=7*5), self.position, "growToDead", self)
-        if change == "growToDead":
+        elif change == "growToDead":
             self._state = EVERGREEN_DEAD
             self.scheduler.schedule_change(GameTime(minutes=1.5*5), self.position, "growToSmall", self)
 

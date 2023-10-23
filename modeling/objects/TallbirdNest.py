@@ -1,5 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from modeling.objects.ObjectWithSingleForm import ObjectWithSingleForm
-from utility.Point2d import Point2d
+if TYPE_CHECKING:
+    from utility.Point2d import Point2d
 
 
 class TallbirdNest(ObjectWithSingleForm):

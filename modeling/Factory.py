@@ -2,17 +2,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from modeling.objects.TallbirdNest import TallbirdNest
-from modeling.objects.TallbirdEgg import TallbirdEgg
-from modeling.objects.Flower import Flower
 from modeling.objects.Grass import Grass
+from modeling.objects.Reeds import Reeds
 from modeling.objects.Sapling import Sapling
 from modeling.objects.Ashes import Ashes
 from modeling.objects.Evergreen import Evergreen
 from modeling.objects.SpiderNest import SpiderNest
 from modeling.objects.PickableObjectModel import PickableObjectModel
+from modeling.objects.StructureModel import StructureModel
 from modeling.objects.BerryBush import BerryBush
 from modeling.objects.Campfire import Campfire
-from modeling.objects.NitreRock import NitreRock
+from modeling.objects.MarshBush import MarshBush
 from modeling.mobs.MobModel import MobModel
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
@@ -23,11 +23,27 @@ if TYPE_CHECKING:
 
 class Factory:
     def __init__(self):
-        pass
+        self.pickable_object_ids = [2, 6, [7,10], [15,19], 21, 22, [24,38], [40,42], 44, 46, [49,54], 57, 58, 60, [65,146]]
+        self.structure_ids = [3, 20, 39, 43, 45, 47, 56, 59, [62,64]]
+        aux = []
+        for elem in self.pickable_object_ids:
+            if type(elem) == list:
+                for a in range(elem[0], elem[1]+1):
+                    aux.append(a)
+            else:
+                aux.append(elem)
+        self.pickable_object_ids = aux
+        aux = []
+        for elem in self.structure_ids:
+            if type(elem) == list:
+                for a in range(elem[0], elem[1]+1):
+                    aux.append(a)
+            else:
+                aux.append(elem)
+        self.structure_ids = aux
 
     # receives image id and returns an object
-    @staticmethod
-    def create_object(image_id : int, pos : Point2d, latest_screen_position : Point2d, scheduler : Scheduler=None) -> ObjectModel:
+    def create_object(self, image_id : int, pos : Point2d, latest_screen_position : Point2d, scheduler : Scheduler=None) -> ObjectModel:
         """Create object described by image_id
 
         :param image_id: image_id from Perception
@@ -42,81 +58,36 @@ class Factory:
         :rtype: ObjectModel
         """
         obj_id = objects_info.get_item_info(info="obj_id", image_id=image_id)
+        name = objects_info.get_item_info(info="name", image_id=image_id)
+        if obj_id in self.pickable_object_ids:
+            return PickableObjectModel(pos, latest_screen_position, obj_id, name)
+        if obj_id in self.structure_ids:
+            return StructureModel(pos, latest_screen_position, obj_id, name)
         if obj_id == 1:
             return TallbirdNest(pos, latest_screen_position)
-        if obj_id == 2:
-            return TallbirdEgg(pos, latest_screen_position)
-        if obj_id == 3:
-            return Flower(pos, latest_screen_position)
         if obj_id == 4:
             return Grass(pos, latest_screen_position, image_id, scheduler)
         if obj_id == 5:
             return Sapling(pos, latest_screen_position, image_id, scheduler)
-        if obj_id == 6:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Seeds")
-        if obj_id == 7:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Flint")
-        if obj_id == 8:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "MonsterMeat")
-        if obj_id == 9:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "HoundTooth")
-        if obj_id == 10:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "PigSkin")
         if obj_id == 11:
             return Ashes(pos, latest_screen_position, scheduler)
         if obj_id == 12:
-            return Evergreen(pos, latest_screen_position, image_id, scheduler)
+            return Evergreen(pos, latest_screen_position, image_id, scheduler, lumpy=False)
         if obj_id == 13:
             return SpiderNest(pos, latest_screen_position, image_id, scheduler)
         if obj_id == 14:
             return BerryBush(pos, latest_screen_position, image_id, scheduler)
-        if obj_id == 15:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Honey")
-        if obj_id == 16:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Stinger")
-        if obj_id == 17:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "FrogLegs")
-        if obj_id == 18:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Blueprint")
-        if obj_id == 19:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Silk")
-        if obj_id == 20:
-            return NitreRock(pos, latest_screen_position)
-        if obj_id == 21:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Meat")
-        if obj_id == 22:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Carrot")
         if obj_id == 23:
             return Campfire(pos, latest_screen_position, image_id, scheduler)
-        if obj_id == 24:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "SpiderGland")
-        if obj_id == 25:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Rocks")
-        if obj_id == 26:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Axe")
-        if obj_id == 27:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Pickaxe")
-        if obj_id == 28:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Shovel")
-        if obj_id == 29:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Hammer")
-        if obj_id == 30:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Razor")
-        if obj_id == 31:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Torch")
-        if obj_id == 32:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "CutGrass")
-        if obj_id == 33:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Twigs")
-        if obj_id == 34:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Rot")
-        if obj_id == 35:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "RottenEgg")
-        if obj_id == 36:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, "Berries")
+        if obj_id == 48:
+            return Evergreen(pos, latest_screen_position, image_id, scheduler, lumpy=True)
+        if obj_id == 55:
+            return MarshBush(pos, latest_screen_position, image_id, scheduler)
+        if obj_id == 61:
+            return Reeds(pos, latest_screen_position, image_id, scheduler)
 
     @staticmethod
-    def create_mob(id_ : int, pos : Point2d) -> MobModel:
+    def create_mob(id_ : int, pos : Point2d, latest_screen_position : Point2d) -> MobModel:
         """Create mob described by id_
 
         :param id_: image_id
@@ -126,58 +97,62 @@ class Factory:
         :return: requested mob
         :rtype: MobModel
         """
+        if id_ == 1:
+            return MobModel(pos, id_, "Treeguard", latest_screen_position)
         if id_ == 2:
-            return MobModel(pos, id_, "Treeguard")
+            return MobModel(pos, id_, "Bee", latest_screen_position)
         if id_ == 3:
-            return MobModel(pos, id_, "Bee")
+            return MobModel(pos, id_, "KillerBee", latest_screen_position)
         if id_ == 4:
-            return MobModel(pos, id_, "KillerBee")
+            return MobModel(pos, id_, "Frog", latest_screen_position)
         if id_ == 5:
-            return MobModel(pos, id_, "Frog")
+            return MobModel(pos, id_, "Hound", latest_screen_position)
         if id_ == 6:
-            return MobModel(pos, id_, "Hound")
+            return MobModel(pos, id_, "IceHound", latest_screen_position)
         if id_ == 7:
-            return MobModel(pos, id_, "IceHound")
+            return MobModel(pos, id_, "FireHound", latest_screen_position)
         if id_ == 8:
-            return MobModel(pos, id_, "FireHound")
+            return MobModel(pos, id_, "Spider", latest_screen_position)
         if id_ == 9:
-            return MobModel(pos, id_, "Spider")
+            return MobModel(pos, id_, "SpiderWarrior", latest_screen_position)
         if id_ == 10:
-            return MobModel(pos, id_, "SpiderWarrior")
+            return MobModel(pos, id_, "Tallbird", latest_screen_position)
         if id_ == 11:
-            return MobModel(pos, id_, "Tallbird")
+            return MobModel(pos, id_, "Ghost", latest_screen_position)
         if id_ == 12:
-            return MobModel(pos, id_, "Ghost")
+            return MobModel(pos, id_, "GuardianPig", latest_screen_position)
         if id_ == 13:
-            return MobModel(pos, id_, "GuardianPig")
+            return MobModel(pos, id_, "Butterfly", latest_screen_position)
         if id_ == 14:
-            return MobModel(pos, id_, "Butterfly")
+            return MobModel(pos, id_, "Merm", latest_screen_position)
         if id_ == 15:
-            return MobModel(pos, id_, "Merm")
+            return MobModel(pos, id_, "BirdRed", latest_screen_position)
         if id_ == 16:
-            return MobModel(pos, id_, "BirdRed")
+            return MobModel(pos, id_, "BirdBlack", latest_screen_position)
         if id_ == 17:
-            return MobModel(pos, id_, "BirdBlack")
-        if id_ == 18:
-            return MobModel(pos, id_, "Rabbit")
+            return MobModel(pos, id_, "Rabbit", latest_screen_position)
+        if id_ == 47:
+            return MobModel(pos, id_, "Tentacle", latest_screen_position)
         if id_ == 48:
-            return MobModel(pos, id_, "Tentacle")
+            return MobModel(pos, id_, "ClockRook", latest_screen_position)
         if id_ == 49:
-            return MobModel(pos, id_, "ClockRook")
+            return MobModel(pos, id_, "ClockKnight", latest_screen_position)
         if id_ == 50:
-            return MobModel(pos, id_, "ClockKnight")
+            return MobModel(pos, id_, "ClockBishop", latest_screen_position)
         if id_ == 51:
-            return MobModel(pos, id_, "ClockBishop")
+            return MobModel(pos, id_, "CrawlingHorror", latest_screen_position)
         if id_ == 52:
-            return MobModel(pos, id_, "CrawlingHorror")
+            return MobModel(pos, id_, "Terrorbeak", latest_screen_position)
         if id_ == 53:
-            return MobModel(pos, id_, "Terrorbeak")
+            return MobModel(pos, id_, "Werepig", latest_screen_position)
         if id_ == 54:
-            return MobModel(pos, id_, "Werepig")
+            return MobModel(pos, id_, "Mosquito", latest_screen_position)
         if id_ == 55:
-            return MobModel(pos, id_, "Mosquito")
-        if id_ == 56:
-            return MobModel(pos, id_, "BirdBlue")
+            return MobModel(pos, id_, "BirdBlue", latest_screen_position)
+        if id_ == 76:
+            return MobModel(pos, id_, "Beefalo", latest_screen_position)
+        if id_ == 104:
+            return MobModel(pos, id_, "Gobbler", latest_screen_position)
 
 
 factory = Factory()

@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 
 from modeling.objects.ObjectModel import ObjectModel
 if TYPE_CHECKING:
-    from modeling.Scheduler import Scheduler
     from utility.Point2d import Point2d
 
 

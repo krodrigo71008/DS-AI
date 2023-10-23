@@ -26,7 +26,6 @@ class Grass(ObjectWithMultipleForms):
             raise Exception("Invalid id!")
         if state == self._state:
             return
-        # update state and schedule growth if it was just picked
         if state == GRASS_READY:
             self.set_state(GRASS_READY)
         else:

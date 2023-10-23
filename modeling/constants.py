@@ -2,10 +2,10 @@
 DISTANCE_FOR_SAME_OBJECT = 2.5
 # distance for two mods to be considered the same one
 DISTANCE_FOR_SAME_MOB = 15
-# if a mob is not seen for this time, it will be removed
-TIME_FOR_MOB_REMOVAL = 5
 # if an object is not detected for this many cycles, it will be removed 
 CYCLES_FOR_OBJECT_REMOVAL = 5
+# if a mob is not detected for this many cycles, it will be removed 
+CYCLES_FOR_MOB_REMOVAL = 5
 # an object needs to be detected for this many cycles to be added to the world model
 CYCLES_TO_ADMIT_OBJECT = 3
 # speed in game coordinates per second

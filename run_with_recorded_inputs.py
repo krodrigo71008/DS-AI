@@ -12,7 +12,7 @@ from utility.Visualizer import Visualizer
 
 
 if __name__ == "__main__":
-    folder_name = f"records/trajectory_2__3"
+    folder_name = f"records/trajectory_2__1"
     os.makedirs(f"{folder_name}/output", exist_ok=True)
 
     perception = Perception()

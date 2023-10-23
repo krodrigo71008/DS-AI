@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 class Campfire(ObjectWithMultipleForms):
     def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler):
-        super().__init__(False, position, latest_screen_position, [46], id_, scheduler)
+        super().__init__(False, position, latest_screen_position, [45], id_, scheduler)
         # I'll add the other states later
 
     def update(self, change : str):

@@ -11,10 +11,11 @@ from PIL import Image
 from perception.ImageObject import ImageObject
 from perception.constants import SCREEN_SIZE, SEGMENTATION_INPUT_SIZE
 from modeling.PlayerModel import PlayerModel
+from modeling.mobs.MobModel import MobModel
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from modeling.Factory import factory
-from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_FOR_OBJECT_REMOVAL, CYCLES_TO_ADMIT_OBJECT
+from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_TO_ADMIT_OBJECT, CYCLES_FOR_MOB_REMOVAL
 from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING, CHUNK_SIZE, DISTANCE_FOR_VALID_PLAYER_POSITION
 from modeling.constants import TILE_SIZE
 from modeling.ObjectsInfo import objects_info
@@ -46,9 +47,10 @@ class WorldModel:
         # objects_by_chunks maps a chunk index to a list of objects in it
         # (x1, x2) -> list
         self.objects_by_chunks : dict[tuple[int, int], list[ObjectModel]] = {}
-        self.mob_list = set()
+        self.mob_lists : dict[str, list[MobModel]] = {}
         self.explored_chunks = set()
-        self.detected_this_cycle : list[list[ObjectModel, bool]] = {}
+        self.objects_detected_this_cycle : list[list[ObjectModel, bool]] = {}
+        self.mobs_detected_this_cycle : list[list[MobModel, bool]] = {}
         self.player : PlayerModel = player
         self.latest_detected_player_position : Point2d = None
         self.cycles_since_player_detected : int = 0
@@ -72,7 +74,9 @@ class WorldModel:
         self.estimation_pairs : list[tuple[str, Point2d, Point2d]] = []
         self.avg_observed_error : Point2d = None
         self.recent_objects : list[list[ObjectModel, int]] = []
+        self.recent_mobs : list[list[MobModel, int]] = []
         self.additions_to_recent_objects : list[list[ObjectModel, int]] = []
+        self.additions_to_recent_mobs : list[list[MobModel, int]] = []
         self.hovering_object : ObjectModel = None
         # i, j index is leftuppermost corner (to get i, j for x, y, divide by TILE_SIZE and round down)
         self.tiles : dict[tuple[int, int], TerrainTile] = {}
@@ -327,7 +331,9 @@ class WorldModel:
 
     def update(self) -> None:
         self.scheduler.update()
-        self.mob_list = set(filter(lambda mob: mob.update_destruction_time(self.clock.dt()), self.mob_list))
+        for mob_list in self.mob_lists.values():
+            for mob in mob_list:
+                mob.update()
 
     def update_local(self, object_list : list[ImageObject]) -> None:
         self.local_objects = object_list
@@ -398,11 +404,18 @@ class WorldModel:
             if chunk in self.objects_by_chunks:
                 cur_obj_list.extend([[obj, False] for obj in self.objects_by_chunks[chunk] 
                                                 if is_inside_convex_polygon([self.c1, self.c2, self.c3, self.c4], obj.position)])
-        self.detected_this_cycle = cur_obj_list
+        self.objects_detected_this_cycle = cur_obj_list
+        cur_mob_list = []
+        for mob_list in self.mob_lists.values():
+            cur_mob_list.extend([[mob, False] for mob in mob_list])
+        self.mobs_detected_this_cycle = cur_mob_list
         # add recent objects to the list that we're going to observe whether we detect them this cycle
-        self.detected_this_cycle.extend([[pair[0], False] for pair in self.recent_objects])
+        self.objects_detected_this_cycle.extend([[pair[0], False] for pair in self.recent_objects])
+        # add recent mobs to the list that we're going to observe whether we detect them this cycle
+        self.mobs_detected_this_cycle.extend([[pair[0], False] for pair in self.recent_mobs])
         self.estimation_errors = []
         self.additions_to_recent_objects = []
+        self.additions_to_recent_mobs = []
         self.estimation_pairs = []
 
     # positions are Point2d
@@ -496,17 +509,16 @@ class WorldModel:
                     lowest_distance = obj.position.distance(pos)
         
         if best_match is None:
-            # in this case, I just identified something that's not in the WorldModel yet, so I create a new object
-            # the second parameter (creation_time) is used as tiebreaker in case two updates are scheduled at the same time
+            # in this case, I just identified something that's not in the WorldModel yet, so I create a new object1
             obj = factory.create_object(image_obj.id, pos, image_obj.box, self.scheduler)
 
             self.additions_to_recent_objects.append([obj, 1])
         else:
             best_match.latest_screen_position = image_obj.box
             # in this case, I identified an object that's already in my WorldModel or in the recent objects list
-            if best_match in [pair[0] for pair in self.detected_this_cycle]:
-                obj_index = [pair[0] for pair in self.detected_this_cycle].index(best_match)
-                self.detected_this_cycle[obj_index][1] = True
+            if best_match in [pair[0] for pair in self.objects_detected_this_cycle]:
+                obj_index = [pair[0] for pair in self.objects_detected_this_cycle].index(best_match)
+                self.objects_detected_this_cycle[obj_index][1] = True
                 # if it's in the recent objects list, update its position
                 if best_match in [pair[0] for pair in self.recent_objects]:
                     # maybe there's a better way, but for now just update its position
@@ -516,6 +528,7 @@ class WorldModel:
             # this is the error from the position in modeling to the one being observed now 
             self.estimation_errors.append(pos - best_match.position)
             self.estimation_pairs.append((best_match.name_str(), pos, best_match.position))
+            
         # if obj_name in self.object_lists:
         #     self.object_lists[obj_name].append(obj)
         # else:
@@ -526,23 +539,52 @@ class WorldModel:
         #     self.objects_by_chunks[self.point_to_chunk_index(pos)] = [obj]
 
     def mob_detected(self, image_obj : ImageObject):
-        # this is just plain wrong, but for now I'll leave it commented for reference
-        # pos = image_obj.position_from_player()
-        # for mob in self.mob_list:
-        #     if pos.distance(mob.position) < DISTANCE_FOR_SAME_MOB and image_obj.id == mob.id:
-        #         mob.update(pos)
-        #         mob.refresh_destruction_time()
-        #         return
-        # mob = factory.create_mob(image_obj.id, pos)
-        # self.mob_list.add(mob)
-        pass
+        # anchor points are usually at the bottom (y) and middle (x)
+        pos = self.local_to_global_position(
+            Point2d.bottom_from_box(image_obj.box),
+            CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+        self.handle_mob_at_position(image_obj, pos)
+    
+
+    def handle_mob_at_position(self, image_obj : ImageObject, pos : Point2d):
+        obj_name = objects_info.get_item_info(info="name", image_id=image_obj.id)
+        mobs_to_analyze : list[MobModel]= []
+        
+        # getting object from pair (obj, cycle_count)
+        mobs_to_analyze.extend([pair[0] for pair in self.recent_mobs])
+
+        best_match : MobModel = None
+        lowest_distance : float = None
+        for mob in mobs_to_analyze:
+            # if the object is close enough to an already detected object of the same type
+            if pos.distance(mob.position) <= DISTANCE_FOR_SAME_OBJECT and mob.name_str() == obj_name:
+                if best_match is None or mob.position.distance(pos) < lowest_distance:
+                    best_match = mob
+                    lowest_distance = mob.position.distance(pos)
+        
+        if best_match is None:
+            # in this case, I just identified something that's not in the WorldModel yet, so I create a new object1
+            obj = factory.create_mob(image_obj.id, pos, image_obj.box)
+
+            self.additions_to_recent_mobs.append([obj, 1])
+        else:
+            best_match.latest_screen_position = image_obj.box
+            # in this case, I identified an object that's already in my WorldModel or in the recent objects list
+            if best_match in [pair[0] for pair in self.mobs_detected_this_cycle]:
+                obj_index = [pair[0] for pair in self.mobs_detected_this_cycle].index(best_match)
+                self.mobs_detected_this_cycle[obj_index][1] = True
+                # if it's in the recent objects list, update its position
+                if best_match in [pair[0] for pair in self.recent_mobs]:
+                    # maybe there's a better way, but for now just update its position
+                    best_match.position = pos
+            best_match.handle_mob_detected(image_obj.id)
 
     def finish_cycle(self) -> None:
         """Marks the end of a modeling cycle, this should be called in the end of update_model() on Modeling.
         It also removes objects that were not detected and should be.
         """
         self.cycles_since_player_detected += 1
-        for pair in self.detected_this_cycle:
+        for pair in self.objects_detected_this_cycle:
             obj = pair[0]
             detected = pair[1]
             # handling the case in which obj is a recent object
@@ -585,6 +627,46 @@ class WorldModel:
                                 chunk_obj_list = self.objects_by_chunks[chunk_index]
                                 obj_index_in_chunk_list = chunk_obj_list.index(obj)
                                 del chunk_obj_list[obj_index_in_chunk_list]
+
+        for pair in self.mobs_detected_this_cycle:
+            mob = pair[0]
+            detected = pair[1]
+            # handling the case in which mob is a recent object
+            if mob in [pair[0] for pair in self.recent_mobs]:
+                mob_index = [pair[0] for pair in self.recent_mobs].index(mob)
+                if detected:
+                    new_count = self.recent_mobs[mob_index][1]+1
+                    # if the required number of cycles to admit a mob is met, add it to both object_lists and objects_by_chunks
+                    if new_count == CYCLES_FOR_MOB_REMOVAL:
+                        self.add_mob(mob)
+                        # also remove it from recent objects
+                        del self.recent_mobs[mob_index]
+                    else:
+                        # update the cycle count for the object
+                        self.recent_mobs[mob_index][1] = new_count
+                else:
+                    # if the object wasn't detected, we remove it
+                    del self.recent_mobs[mob_index]
+            # handling the case in which mob is a world model object (object removal if it wasn't detected for
+            # many cycles in a row)
+            else:
+                if detected:
+                    mob.reset_cycles_to_be_deleted()
+                else:
+                    # we make it so that objects on the screen border aren't deleted if they aren't seen for a while
+                    # since they often are offscreen or blocked by HUD
+                    if is_inside_convex_polygon([self.c1_deletion_border, 
+                                                    self.c2_deletion_border,
+                                                    self.c3_deletion_border, 
+                                                    self.c4_deletion_border], mob.position):
+                        # we shouldn't count down an object for deletion if we're hovering over it
+                        if mob != self.hovering_object:
+                            mob.countdown_cycles_to_be_deleted()
+                            if mob.get_cycles_to_be_deleted() == 0:
+                                mob_name = mob.name_str()
+                                mob_list = self.mob_lists[mob_name]
+                                mob_index = mob_list.index(mob)
+                                del mob_list[mob_index]
 
         # adding new recent objects 
         self.recent_objects.extend(self.additions_to_recent_objects)
@@ -719,6 +801,39 @@ class WorldModel:
                             else:
                                 res_aux.append(obj_aux)
                         result[obj] = res_aux
+                    elif filter_ == "nest_small":
+                        res_aux = []
+                        for obj_aux in self.object_lists[obj]:
+                            # if the object has the is_small method, we can choose it
+                            op = getattr(obj_aux, "is_small", None)
+                            if callable(op):
+                                if obj_aux.is_small():
+                                    res_aux.append(obj_aux)
+                            else:
+                                res_aux.append(obj_aux)
+                        result[obj] = res_aux
+                    elif filter_ == "nest_medium":
+                        res_aux = []
+                        for obj_aux in self.object_lists[obj]:
+                            # if the object has the is_medium method, we can choose it
+                            op = getattr(obj_aux, "is_medium", None)
+                            if callable(op):
+                                if obj_aux.is_medium():
+                                    res_aux.append(obj_aux)
+                            else:
+                                res_aux.append(obj_aux)
+                        result[obj] = res_aux
+                    elif filter_ == "nest_big":
+                        res_aux = []
+                        for obj_aux in self.object_lists[obj]:
+                            # if the object has the is_big method, we can choose it
+                            op = getattr(obj_aux, "is_big", None)
+                            if callable(op):
+                                if obj_aux.is_big():
+                                    res_aux.append(obj_aux)
+                            else:
+                                res_aux.append(obj_aux)
+                        result[obj] = res_aux
                     else:
                         raise ValueError("Filter not implemented")
             else:
@@ -741,3 +856,15 @@ class WorldModel:
             self.objects_by_chunks[self.point_to_chunk_index(pos)].append(obj)
         else:
             self.objects_by_chunks[self.point_to_chunk_index(pos)] = [obj]
+    
+    def add_mob(self, mob : MobModel) -> None:
+        """Add object to world model
+
+        :param mob: mob to be added
+        :type mob: MobModel
+        """
+        mob_name = mob.name_str()
+        if mob_name in self.object_lists:
+            self.object_lists[mob_name].append(mob)
+        else:
+            self.object_lists[mob_name] = [mob]
