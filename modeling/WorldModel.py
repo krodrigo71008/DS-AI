@@ -27,7 +27,7 @@ from utility.utility import is_inside_convex_polygon, get_color_representation_d
 
 
 class WorldModel:
-    def __init__(self, player : PlayerModel, clock : Clock, debug : bool = False):
+    def __init__(self, player : PlayerModel, clock : Clock, debug : bool = False, measure_time : bool = False):
         """Generates the world model. It should be noted that the full workflow for a cycle of updating is:
             - if player was detected (on perception), call player_detected()
             - call start_cycle()
@@ -39,9 +39,6 @@ class WorldModel:
         :param clock: a clock to keep track of how much time passed since the last update
         :type clock: Clock
         """
-        # map of object lists, the first index represents an object id and
-        # object_list[id] has the objects with that id
-        self.local_objects = []
         # maps object name to the object list
         self.object_lists : dict[str, list[ObjectModel]] = {}
         # objects_by_chunks maps a chunk index to a list of objects in it
@@ -85,6 +82,9 @@ class WorldModel:
         self.segmentation_timestamp : float = None
         self.debug = debug
         self.latest_debug_image : Image.Image = None
+        self.measure_time = measure_time
+        if self.measure_time:
+            self.time_records_list = []
 
     @staticmethod
     def coords_to_chunk_coords(p : Point2d) -> Point2d:
@@ -107,8 +107,15 @@ class WorldModel:
         :param pos: position in the world
         :type pos: Point2d
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+
         self.objects_by_chunks[self.point_to_chunk_index(pos)].remove(instance)
         self.object_lists[instance.name_str()].remove(instance)
+
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("remove_object", t2-t1))
         
 
     def warp_image_to_ground(self, image: np.array, heading : float, pitch : float, 
@@ -128,6 +135,9 @@ class WorldModel:
         :return: warped image, x range and y range relative to the player
         :rtype: tuple[np.array, tuple[float, float], tuple[float, float]]
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+
         # f = H / (2*tan(AFOV/2)), f focal distance, H height, AFOV angular FOV
         f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
         cx = SCREEN_SIZE["width"]/2
@@ -177,6 +187,11 @@ class WorldModel:
         
         image = image.astype('uint8')
         res = cv2.warpPerspective(image, matrix, (SEGMENTATION_INPUT_SIZE[0], SEGMENTATION_INPUT_SIZE[1]), flags=cv2.INTER_NEAREST)
+        
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("warp_image_to_ground", t2-t1))
+
         return res, (x_min[0], x_max[0]), (y_min[0], y_max[0])
 
     def process_segmentation_image(self, image: np.array) -> Image.Image:
@@ -185,6 +200,9 @@ class WorldModel:
         :param image: segmentation result image
         :type image: np.array
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+
         # in openCV, x is right and y is down, but for us x1 is down and x2 is right, so they are inverted
         warped_image, x_range, y_range = self.warp_image_to_ground(image, CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
         player_pos = self.player.estimate_position_at_timestamp(self.segmentation_timestamp)
@@ -275,6 +293,10 @@ class WorldModel:
             # debug_image.save(debug_image_out)
             self.latest_debug_image = debug_image
 
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("process_segmentation_image", t2-t1))
+
 
     def decide_if_explored(self, player_position : Point2d) -> bool:
         """Calculates if the current chunk should be considered explored
@@ -330,13 +352,17 @@ class WorldModel:
         return required
 
     def update(self) -> None:
+        if self.measure_time:
+            t1 = time.time_ns()
+
         self.scheduler.update()
         for mob_list in self.mob_lists.values():
             for mob in mob_list:
                 mob.update()
 
-    def update_local(self, object_list : list[ImageObject]) -> None:
-        self.local_objects = object_list
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("update", t2-t1))
 
     def decide_player_position(self, player_positions : list[Point2d]) -> None:
         """Decide which one of the given possible positions is the real one
@@ -346,6 +372,10 @@ class WorldModel:
         """
         if len(player_positions) == 0:
             return
+        
+        if self.measure_time:
+            t1 = time.time_ns()
+
         player_pos = None
         best_distance = None
         for possibility in player_positions:
@@ -363,6 +393,10 @@ class WorldModel:
             self.latest_detected_player_position = player_pos
             self.cycles_since_player_detected = 0
 
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("decide_player_position", t2-t1))
+
 
     def start_cycle(self, heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, 
                     distance : float = CAMERA_DISTANCE, fov : float = FOV) -> None:
@@ -377,6 +411,9 @@ class WorldModel:
         :type fov: float
 
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+
         # if it's been more than 10 cycles since the last time the player was detected, we'll assume 
         # that the camera is above the player
         if self.cycles_since_player_detected > 10 or self.latest_detected_player_position is None:
@@ -418,6 +455,10 @@ class WorldModel:
         self.additions_to_recent_mobs = []
         self.estimation_pairs = []
 
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("start_cycle", t2-t1))
+
     # positions are Point2d
     def local_to_almost_global_position(self, local_position : Point2d, 
             heading : float, pitch : float, distance : float, fov : float,  
@@ -445,16 +486,20 @@ class WorldModel:
         fy = (local_position.x2 - SCREEN_SIZE["height"]/2)/f
         heading = heading*math.pi/180
         pitch = pitch*math.pi/180
-        world_x = (-math.sin(heading)*self.FOLLOW_HEIGHT*fx
-                    -math.sin(heading)*math.sin(pitch)*distance*fx
-                    +math.cos(heading)*math.sin(pitch)*self.FOLLOW_HEIGHT*fy
-                    +math.cos(heading)*distance*fy
-                    -math.cos(heading)*math.cos(pitch)*self.FOLLOW_HEIGHT)/(math.cos(pitch)*fy+math.sin(pitch))
-        world_z = (math.cos(heading)*self.FOLLOW_HEIGHT*fx
-                    +math.cos(heading)*math.sin(pitch)*distance*fx
-                    +math.sin(heading)*math.sin(pitch)*self.FOLLOW_HEIGHT*fy
-                    +math.sin(heading)*distance*fy
-                    -math.sin(heading)*math.cos(pitch)*self.FOLLOW_HEIGHT)/(math.cos(pitch)*fy+math.sin(pitch))
+        sin_heading = math.sin(heading)
+        cos_heading = math.cos(heading)
+        sin_pitch = math.sin(pitch)
+        cos_pitch = math.cos(pitch)
+        world_x = (-sin_heading*self.FOLLOW_HEIGHT*fx
+                    -sin_heading*sin_pitch*distance*fx
+                    +cos_heading*sin_pitch*self.FOLLOW_HEIGHT*fy
+                    +cos_heading*distance*fy
+                    -cos_heading*cos_pitch*self.FOLLOW_HEIGHT)/(cos_pitch*fy+sin_pitch)
+        world_z = (cos_heading*self.FOLLOW_HEIGHT*fx
+                    +cos_heading*sin_pitch*distance*fx
+                    +sin_heading*sin_pitch*self.FOLLOW_HEIGHT*fy
+                    +sin_heading*distance*fy
+                    -sin_heading*cos_pitch*self.FOLLOW_HEIGHT)/(cos_pitch*fy+sin_pitch)
         # in our world model, we'll use (x,z) as the two coordinates
         return Point2d(world_x, world_z)
 
@@ -475,7 +520,15 @@ class WorldModel:
         :return: position in the world's coordinate system
         :rtype: Point2d
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+
         pos = self.local_to_almost_global_position(local_position, heading, pitch, distance, fov)
+
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("local_to_global_position", t2-t1))
+
         return self.origin_coordinates + pos
 
     def object_detected(self, image_obj : ImageObject) -> None:
@@ -487,6 +540,9 @@ class WorldModel:
     
 
     def handle_object_at_position(self, image_obj : ImageObject, pos : Point2d):
+        if self.measure_time:
+            t1 = time.time_ns()
+
         obj_name = objects_info.get_item_info(info="name", image_id=image_obj.id)
         required_chunks = [self.point_to_chunk_index(pos)]
         adj_required_chunks = self.required_nearby_chunks(pos)
@@ -538,6 +594,10 @@ class WorldModel:
         # else:
         #     self.objects_by_chunks[self.point_to_chunk_index(pos)] = [obj]
 
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("handle_object_at_position", t2-t1))
+
     def mob_detected(self, image_obj : ImageObject):
         # anchor points are usually at the bottom (y) and middle (x)
         pos = self.local_to_global_position(
@@ -547,6 +607,9 @@ class WorldModel:
     
 
     def handle_mob_at_position(self, image_obj : ImageObject, pos : Point2d):
+        if self.measure_time:
+            t1 = time.time_ns()
+
         obj_name = objects_info.get_item_info(info="name", image_id=image_obj.id)
         mobs_to_analyze : list[MobModel]= []
         
@@ -579,10 +642,17 @@ class WorldModel:
                     best_match.position = pos
             best_match.handle_mob_detected(image_obj.id)
 
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("handle_mob_at_position", t2-t1))
+
     def finish_cycle(self) -> None:
         """Marks the end of a modeling cycle, this should be called in the end of update_model() on Modeling.
         It also removes objects that were not detected and should be.
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+        
         self.cycles_since_player_detected += 1
         for pair in self.objects_detected_this_cycle:
             obj = pair[0]
@@ -688,12 +758,19 @@ class WorldModel:
         if self.decide_if_explored(self.player.estimate_position_at_timestamp(self.yolo_timestamp)):
             self.explored_chunks.add(player_chunk)
 
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("finish_cycle", t2-t1))
+
     def get_closest_unexplored_chunk(self) -> tuple[int, int]:
         """Get closest unexplored chunk
 
         :return: chunk index of the closest unexplored chunk
         :rtype: tuple[int, int]
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+        
         di = [-1, 0, 1, 0]
         dj = [0, 1, 0, -1]
         used_list = set()
@@ -701,12 +778,18 @@ class WorldModel:
         chunk_aux = self.point_to_chunk_index(self.player.position)
         while True:
             if chunk_aux not in self.explored_chunks:
-                return chunk_aux
+                break
             for k in range(4):
                 if (chunk_aux[0] + di[k], chunk_aux[1] + dj[k]) not in used_list:
                     potential_list.put((chunk_aux[0] + di[k], chunk_aux[1] + dj[k]))
             used_list.add(chunk_aux)
             chunk_aux = potential_list.get()
+
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append(("get_closest_unexplored_chunk", t2-t1))
+        
+        return chunk_aux
 
 
     def get_current_chunks(self) -> list[tuple[int, int]]:
@@ -740,6 +823,9 @@ class WorldModel:
         :return: dict with keys being object names and values being lists of objects
         :rtype: dict[str, list[ObjectModel]]
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+
         result = {}
         for obj in obj_list:
             if obj in self.object_lists.keys():
@@ -838,6 +924,11 @@ class WorldModel:
                         raise ValueError("Filter not implemented")
             else:
                 result[obj] = []
+
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records_list.append((f"get_all_of {obj_list}", t2-t1))
+        
         return result
     
     def add_object(self, obj : ObjectModel) -> None:

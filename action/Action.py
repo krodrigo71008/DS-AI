@@ -1,3 +1,5 @@
+import time
+
 import keyboard
 import mouse
 
@@ -5,9 +7,15 @@ from control.Control import Control
 
 
 class Action:
-    def __init__(self):
+    def __init__(self, debug=False, measure_time=False):
         self.current_keys = set()
-        self.records = []
+        self.debug = debug
+        if self.debug:
+            self.records = []
+        
+        self.measure_time = measure_time
+        if self.measure_time:
+            self.time_records = []
 
     def act(self, control: Control) -> None:
         """Use mouse and keyboard to perform the action decided by the Control layer
@@ -15,6 +23,9 @@ class Action:
         :param control: Control layer
         :type control: Control
         """
+        if self.measure_time:
+            t1 = time.time_ns()
+
         # key_action is array of strings
         key_action = control.key_action
         mouse_action = control.mouse_action
@@ -23,9 +34,11 @@ class Action:
                 keys_to_release = list(self.current_keys.difference(key_action[0]))
                 if len(keys_to_release) > 0:
                     keyboard.release('+'.join(keys_to_release))
-                    self.records.append(('release', '+'.join(keys_to_release)))
+                    if self.debug:
+                        self.records.append(('release', '+'.join(keys_to_release)))
                 keyboard.press('+'.join(key_action[0]))
-                self.records.append(('´press', '+'.join(key_action[0])))
+                if self.debug:
+                    self.records.append(('´press', '+'.join(key_action[0])))
                 self.current_keys = set(key_action[0])
             elif key_action[1] == "press_and_release":
                 # this is probably wrong, but for now just release all keys when doing it
@@ -34,7 +47,8 @@ class Action:
                         keyboard.release('+'.join(self.current_keys))
                         self.current_keys = set()
                     keyboard.press_and_release('+'.join(key_action[0]))
-                    self.records.append(('press_and_release', '+'.join(key_action[0])))
+                    if self.debug:
+                        self.records.append(('press_and_release', '+'.join(key_action[0])))
                     self.current_keys = self.current_keys.difference(key_action[0])
         else:
             if len(self.current_keys) > 0:
@@ -49,6 +63,10 @@ class Action:
                     mouse.right_click()
                 elif mouse_action[0] == "move":
                     mouse.move(mouse_action[1].x1, mouse_action[1].x2)
+
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records.append(t2-t1)
         
 
     def act_mock(self, control: Control) -> list[str]:

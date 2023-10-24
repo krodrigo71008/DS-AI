@@ -253,3 +253,9 @@ class DebugScreen:
         elif shape == "x":
             map_.create_line(x-6, y-6, x+6, y+6, fill="red")
             map_.create_line(x+6, y-6, x-6, y+6, fill="red")
+
+    def close(self):
+        self.window.destroy()
+        self.vision_debug_queue.close()
+        self.segmentation_debug_queue.close()
+        self.control_debug_queue.close()

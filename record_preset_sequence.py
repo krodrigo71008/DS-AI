@@ -29,11 +29,17 @@ def vision_main_recorder(detected_objects_queue: Queue, should_start: Value, sho
         timestamp = time.time()
         vision_timestamps.append(timestamp)
         objects = perception.perceive()[0]
-        detected_objects_queue.put((objects, timestamp))
-    q.close()
+        try:
+            detected_objects_queue.put((objects, timestamp))
+        except ValueError:
+            print("detected_objects_queue closed")
     np.save(f"{folder_name}/{trajectory_name}_vision_times.npy", vision_timestamps, allow_pickle=False)
     for i, cap_img in enumerate(perception.all_captured_images):
         np.save(f"{folder_name}/vision_{i}.npy", cap_img, allow_pickle=False)
+
+    detected_objects_queue.cancel_join_thread()
+    if q is not None:
+        q.cancel_join_thread()
     print("Vision done")
     
 
@@ -49,17 +55,23 @@ def segmentation_main_recorder(segmentation_results_queue: Queue, should_start: 
         timestamp = time.time()
         seg_timestamps.append(timestamp)
         results = seg_model.perceive()
-        segmentation_results_queue.put((results, timestamp))
-    q.close()
+        try:
+            segmentation_results_queue.put((results, timestamp))
+        except ValueError:
+            print("segmentation_results_queue closed")
     np.save(f"{folder_name}/{trajectory_name}_segmentation_times.npy", seg_timestamps, allow_pickle=False)
     for i, cap_img in enumerate(seg_model.all_captured_images):
         np.save(f"{folder_name}/segmentation_{i}.npy", cap_img, allow_pickle=False)
+
+    segmentation_results_queue.cancel_join_thread()
+    if q is not None:
+        q.cancel_join_thread()
     print("Segmentation done")
 
 def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Queue, should_start: Value, 
                           should_stop: Value, trajectory_name: str, folder_name : str, trajectory: dict[str, list[Point2d]], q: Queue = None):
     clock = ClockRecorder()
-    action = Action()
+    action = Action(debug=q is not None)
     control = Control(debug=q is not None)
     decision_making = DecisionMaking(debug=q is not None)
     modeling = ModelingRecorder(debug=q is not None, clock=clock) # we want to record modeling's clock times to be able to reproduce them later
@@ -88,17 +100,24 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
                     idle_start = None
         action.act(control)
         if q is not None and q.empty():
-            q.put(("control_info", q1, q2, q3))
+            try:
+                q.put(("control_info", q1, q2, q3))
+            except ValueError:
+                print("control debug_queue closed")
         if i >= len(trajectory):
             should_stop.value = 1
             print("Stopping")
             break
-    q.close()
     np.save(f"{folder_name}/{trajectory_name}_modeling_clock_times.npy", clock.time_records, allow_pickle=False)
     np.save(f"{folder_name}/{trajectory_name}_modeling_direction_changes.npy", 
             modeling.player_model.all_direction_changes)
     np.save(f"{folder_name}/{trajectory_name}_modeling_direction_changes_timestamps.npy", 
             modeling.player_model.all_direction_changes_timestamps, allow_pickle=False)
+    
+    detected_objects_queue.cancel_join_thread()
+    segmentation_queue.cancel_join_thread()
+    if q is not None:
+        q.cancel_join_thread()
     print("Control done")
     
 
@@ -158,15 +177,10 @@ if __name__ == "__main__":
             elif keyboard.is_pressed("l"):
                 should_stop.value = 1
             debug_screen.update()
-        while not debug_screen.vision_debug_queue.empty():
-            debug_screen.vision_debug_queue.get()
-        while not debug_screen.segmentation_debug_queue.empty():
-            debug_screen.segmentation_debug_queue.get()
-        while not debug_screen.control_debug_queue.empty():
-            debug_screen.control_debug_queue.get()
-        vision_process.join()
-        segmentation_process.join()
-        control_process.join()
+        should_stop.value = 1
+        debug_screen.close()
+        detected_objects_queue.close()
+        segmentation_queue.close()
     else:
         should_start = Value('b', 0)
         should_stop = Value('b', 0)
@@ -188,9 +202,13 @@ if __name__ == "__main__":
                 should_start.value = 1
             elif keyboard.is_pressed("l"):
                 should_stop.value = 1
-        vision_process.join()
-        segmentation_process.join()
-        control_process.join()
+        should_stop.value = 1
+        detected_objects_queue.close()
+        segmentation_queue.close()
+
+    vision_process.join()
+    segmentation_process.join()
+    control_process.join()
 
 
 # import time

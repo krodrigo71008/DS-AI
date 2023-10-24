@@ -1,27 +1,29 @@
-import time
 import glob
 import os
+import pickle
 
 import numpy as np
+import pandas as pd
 
 from modeling.Modeling import Modeling
 from perception.Perception import Perception
-from perception.SegmentationModel import SegmentationRecorder
+from perception.SegmentationModel import SegmentationModel
 from utility.Clock import ClockMock
 from utility.Visualizer import Visualizer
 
 
 if __name__ == "__main__":
     folder_name = f"records/trajectory_2__1"
+    should_measure_time = False
     os.makedirs(f"{folder_name}/output", exist_ok=True)
 
-    perception = Perception()
+    perception = Perception(measure_time=should_measure_time)
     timestamp_files = glob.glob(f"{folder_name}/*_vision_times.npy")
     assert len(timestamp_files) == 1
     vision_timestamps = np.load(timestamp_files[0])
     vision_index = -1
 
-    seg_model = SegmentationRecorder()
+    seg_model = SegmentationModel(measure_time=should_measure_time)
     timestamp_files = glob.glob(f"{folder_name}/*_segmentation_times.npy")
     assert len(timestamp_files) == 1
     seg_timestamps = np.load(timestamp_files[0])
@@ -39,7 +41,7 @@ if __name__ == "__main__":
     assert len(timestamp_files) == 1
     clock_timestamps = np.load(timestamp_files[0])
     clock = ClockMock(clock_timestamps)
-    modeling = Modeling(clock=clock, debug=True)
+    modeling = Modeling(clock=clock, debug=True, measure_time=should_measure_time)
 
     vis_screen = Visualizer()
 
@@ -103,8 +105,31 @@ if __name__ == "__main__":
         vis_screen.draw_estimation_errors(modeling.world_model.estimation_errors)
         vis_screen.draw_time(clock.time())
         vis_screen.export_results(f"{folder_name}/output/{clock.current_time_index - 2}.jpg")
+
+    if should_measure_time:
+        # save perception time records
+        perception_df = pd.DataFrame(perception.time_records, columns=perception.split_names)
+        perception_df.to_csv("times/perception.csv", index=False)
+
+        # save segmentation time records
+        segmentation_df = pd.DataFrame(seg_model.time_records, columns=seg_model.split_names)
+        segmentation_df.to_csv("times/segmentation.csv", index=False)
+
+        # save modeling time records
+        modeling_df = pd.DataFrame(modeling.time_records, columns=modeling.split_names)
+        modeling_df.to_csv("times/modeling.csv", index=False)
+
+        # save player model time records
+        player_model_df = pd.DataFrame({'update': modeling.player_model.time_records})
+        player_model_df.to_csv("times/player_model.csv", index=False)
+
+        # save world model time records
+        types = [p[0] for p in modeling.world_model.time_records_list]
+        times = [p[1] for p in modeling.world_model.time_records_list]
+        world_model_df = pd.DataFrame({'type': types, 'time': times})
+        world_model_df.to_csv("times/world_model.csv", index=False)
         
-print("Done")
+    print("Done")
 
 # import time
 # import pickle

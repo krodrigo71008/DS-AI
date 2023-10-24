@@ -1,4 +1,5 @@
 import math
+import time
 
 from decisionMaking.ActionRequester import ActionRequester
 from decisionMaking.BehaviorTree import DSBehaviorTree
@@ -12,7 +13,7 @@ import numpy as np
 
 
 class DecisionMaking:
-    def __init__(self, debug=False):
+    def __init__(self, debug=False, measure_time : bool = False):
         self.primary_action = None
         self.secondary_action = None
         self.action_requester = ActionRequester()
@@ -20,6 +21,11 @@ class DecisionMaking:
         self.debug : bool = debug
         if self.debug:
             self.records = []
+
+        self.measure_time = measure_time
+        if self.measure_time:
+            self.time_records = []
+            self.split_names = ["primary_system", "secondary_system", "emergency_system", "inventory_management_system"]
 
     # decides the action (high level)
     # should be called every loop
@@ -170,10 +176,31 @@ class DecisionMaking:
 
     # main function that should be called
     def decide(self, modeling):
+        if self.measure_time:
+            t1 = time.time_ns()
+
         self.primary_system(modeling)
+
+        if self.measure_time:
+            t2 = time.time_ns()
+
         self.secondary_system(modeling)
+
+        if self.measure_time:
+            t3 = time.time_ns()
+            
         self.inventory_management_system(modeling)
+
+        if self.measure_time:
+            t4 = time.time_ns()
+            
         self.emergency_system(modeling)
+
+        if self.measure_time:
+            t5 = time.time_ns()
+            self.time_records.append([t2-t1, t3-t2, t4-t3, t5-t4])
+            
+
         if self.debug:
             self.records.append((self.primary_action, self.textify(self.secondary_action)))
             return (self.primary_action, self.secondary_action)

@@ -1,3 +1,5 @@
+import time
+
 import mss
 import numpy as np
 from PIL import Image
@@ -13,7 +15,7 @@ mon = {"top": SCREEN_POS["top"], "left": SCREEN_POS["left"],
 
 
 class Perception:
-    def __init__(self, debug=False, queue=None):
+    def __init__(self, debug=False, queue=None, measure_time=False):
         self.model = YOLO("perception/darknet/best.pt")
         self.CONFIDENCE_THRESHOLD = .5
         self.NMS_THRESHOLD = .7
@@ -24,6 +26,10 @@ class Perception:
         self.debug = debug
         if self.debug:
             self.queue = queue
+        self.measure_time = measure_time
+        if self.measure_time:
+            self.time_records = []
+            self.split_names = ["screenshot", "hide_huds", "process_frame", "create_objects", "put_in_debug_queue"]
         frame = self.get_screenshot()
         frame = Image.fromarray(frame, mode="RGB")
         frame = np.asarray(frame)
@@ -46,17 +52,44 @@ class Perception:
         return classes, scores, boxes
 
     def perceive(self, frame : np.array = None):
+        if self.measure_time:
+            t1 = time.time_ns()
+
         if frame is None:
             frame = self.get_screenshot() # takes like 30 ms avg
+
+        if self.measure_time:
+            t2 = time.time_ns()
+
         frame = hide_huds_numpy(frame)
+
+        if self.measure_time:
+            t3 = time.time_ns()
+            
         classes, scores, boxes = self.process_frame(frame) # takes like 50 ms avg
+
+        if self.measure_time:
+            t4 = time.time_ns()
+            
         new_classes = [yolo_id_converter.yolo_to_actual_id(id_) for id_ in classes]
         self.objects = []
         for class_id, score, box in zip(new_classes, scores, boxes):
             obj = ImageObject(class_id, score, box)
             self.objects.append(obj)
+
+        if self.measure_time:
+            t5 = time.time_ns()
+            
         if self.debug:
-            self.queue.put(("detected_objects", draw_annotations(frame, classes, scores, boxes)[0])) # takes like 20 ms avg
+            try:
+                self.queue.put(("detected_objects", draw_annotations(frame, classes, scores, boxes)[0])) # takes like 20 ms avg
+            except ValueError:
+                print("perception debug_queue closed")
+
+        if self.measure_time:
+            t6 = time.time_ns()
+            self.time_records.append([t2-t1, t3-t2, t4-t3, t5-t4, t6-t5])
+            
         return self.objects, classes, scores, boxes
 
 class PerceptionRecorder(Perception):

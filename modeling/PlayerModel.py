@@ -1,4 +1,6 @@
 import math
+import time
+
 from modeling.Inventory import Inventory
 from modeling.constants import TILE_SIZE
 from utility.Clock import Clock
@@ -7,7 +9,7 @@ from modeling.constants import PLAYER_BASE_SPEED
 
 
 class PlayerModel:
-    def __init__(self, clock : Clock):
+    def __init__(self, clock : Clock, measure_time : bool = False):
         # since the player starts in the middle of a tile, to simplify things we set the player position to match the center of a tile
         self.position : Point2d = Point2d(TILE_SIZE//2, TILE_SIZE//2)
         self.position_before_correction : Point2d = Point2d(TILE_SIZE//2, TILE_SIZE//2)
@@ -23,6 +25,10 @@ class PlayerModel:
         # direction in radians
         self.direction : float = None
         self.CORRECTION_GAIN = 0.9
+
+        self.measure_time = measure_time
+        if self.measure_time:
+            self.time_records = []
 
     def move(self, dt : float) -> None:
         """Moves the player model in the current direction
@@ -43,12 +49,19 @@ class PlayerModel:
         self.direction = direction
 
     def update(self) -> None:
+        if self.measure_time:
+            t1 = time.time_ns()
+
         self.inventory.update(self.clock.dt())
         self.move(self.clock.dt())
         self.hunger -= self.clock.dt()*75/480
         day_section = self.clock.day_section()
         if day_section == "Dusk" or day_section == "Night":
             self.sanity -= self.clock.dt()*5/60
+
+        if self.measure_time:
+            t2 = time.time_ns()
+            self.time_records.append(t2-t1)
 
     def correct_error(self, err : Point2d) -> None:
         self.position_before_correction = self.position
