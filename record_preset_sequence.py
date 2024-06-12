@@ -69,7 +69,7 @@ def segmentation_main_recorder(segmentation_results_queue: Queue, should_start: 
     print("Segmentation done")
 
 def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Queue, should_start: Value, 
-                          should_stop: Value, trajectory_name: str, folder_name : str, trajectory: dict[str, list[Point2d]], q: Queue = None):
+                          should_stop: Value, trajectory_name: str, folder_name : str, trajectory: list[Point2d], q: Queue = None):
     clock = ClockRecorder()
     action = Action(debug=q is not None)
     control = Control(debug=q is not None)
@@ -95,9 +95,11 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
             if idle_start is None:
                 idle_start = time.time()
             else:
-                if time.time() - idle_start > 1.0: # if we've been idle for more than 1 second, go to next step
+                if time.time() - idle_start > 0.5: # if we've been idle for more than 0.5 seconds, go to next step
                     i += 1
                     idle_start = None
+        else: 
+            idle_start = None
         action.act(control)
         if q is not None and q.empty():
             try:
@@ -110,9 +112,9 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
             break
     np.save(f"{folder_name}/{trajectory_name}_modeling_clock_times.npy", clock.time_records, allow_pickle=False)
     np.save(f"{folder_name}/{trajectory_name}_modeling_direction_changes.npy", 
-            modeling.player_model.all_direction_changes)
+            modeling.all_direction_changes)
     np.save(f"{folder_name}/{trajectory_name}_modeling_direction_changes_timestamps.npy", 
-            modeling.player_model.all_direction_changes_timestamps, allow_pickle=False)
+            modeling.all_direction_changes_timestamps, allow_pickle=False)
     
     detected_objects_queue.cancel_join_thread()
     segmentation_queue.cancel_join_thread()
@@ -279,7 +281,7 @@ if __name__ == "__main__":
 #         decision_making.secondary_action = ("go_precisely_to", route[route_index])
 #         orders.append(("go_precisely_to", route[route_index]))
 #         control.control(decision_making, modeling)
-#         # print(f"{time.time() - start_time:.2f}: {modeling.player_model.position}, go_to {route[route_index]}, keys {control.key_action}")
+#         # print(f"{time.time() - start_time:.2f}: {modeling.player_position()}, go_to {route[route_index]}, keys {control.key_action}")
 #         action.act(control)
     
 #     for i, cap_img in enumerate(perception.all_captured_images):

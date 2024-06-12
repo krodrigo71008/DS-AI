@@ -26,7 +26,7 @@ class Point2d:
     def __truediv__(self, number):
         return Point2d(self.x1/number, self.x2/number)
 
-    def distance(self, other) -> float:
+    def distance(self, other : "Point2d") -> float:
         return math.sqrt((self.x1-other.x1)**2+(self.x2-other.x2)**2)
 
     def angle(self) -> float:

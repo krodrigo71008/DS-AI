@@ -4,7 +4,9 @@ from typing import TYPE_CHECKING
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from utility.GameTime import GameTime
 if TYPE_CHECKING:
+    from modeling.Modeling import Modeling
     from modeling.Scheduler import Scheduler
+    from modeling.SlamIndexManager import SlamIndexManager
     from utility.Point2d import Point2d
 
 REEDS_READY = 98
@@ -12,10 +14,12 @@ REEDS_HARVESTED = 186
 
 
 class Reeds(ObjectWithMultipleForms):
-    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler):
-        super().__init__(False, position, latest_screen_position, [REEDS_READY, REEDS_HARVESTED], id_, scheduler)
-        if id_ == REEDS_HARVESTED:
-            scheduler.schedule_change(GameTime(non_winter_days=3), position, "grow", self)
+    def __init__(self, modeling : Modeling, slam_state_index : int, latest_screen_position : Point2d, image_id : int, scheduler : Scheduler,
+                 slam_index_manager : SlamIndexManager):
+        super().__init__(modeling, slam_state_index, False, latest_screen_position, [REEDS_READY, REEDS_HARVESTED], image_id, scheduler,
+                         slam_index_manager)
+        if image_id == REEDS_HARVESTED:
+            scheduler.schedule_change(GameTime(non_winter_days=3), "grow", self)
 
     def update(self, change : str):
         if change == "grow":
@@ -33,7 +37,7 @@ class Reeds(ObjectWithMultipleForms):
 
     def harvest(self):
         self._state = REEDS_HARVESTED
-        self.scheduler.schedule_change(GameTime(non_winter_days=3), self.position, "grow", self)
+        self.scheduler.schedule_change(GameTime(non_winter_days=3), "grow", self)
 
     def is_harvested(self) -> bool:
         return self._state == REEDS_HARVESTED

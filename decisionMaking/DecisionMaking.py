@@ -1,19 +1,24 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import math
 import time
+
+import numpy as np
 
 from decisionMaking.ActionRequester import ActionRequester
 from decisionMaking.BehaviorTree import DSBehaviorTree
 from decisionMaking.constants import MONSTER_DANGER_DISTANCE, PICK_UP_DISTANCE
 from modeling.Modeling import Modeling
-from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
-from utility.Point2d import Point2d
-
-import numpy as np
+if TYPE_CHECKING:
+    from modeling.Modeling import Modeling
+    from modeling.objects.ObjectModel import ObjectModel
+    from modeling.mobs.MobModel import MobModel
+    from utility.Point2d import Point2d
 
 
 class DecisionMaking:
-    def __init__(self, debug=False, measure_time : bool = False):
+    def __init__(self, debug=False):
         self.primary_action = None
         self.secondary_action = None
         self.action_requester = ActionRequester()
@@ -21,11 +26,6 @@ class DecisionMaking:
         self.debug : bool = debug
         if self.debug:
             self.records = []
-
-        self.measure_time = measure_time
-        if self.measure_time:
-            self.time_records = []
-            self.split_names = ["primary_system", "secondary_system", "emergency_system", "inventory_management_system"]
 
     # decides the action (high level)
     # should be called every loop
@@ -55,14 +55,14 @@ class DecisionMaking:
                 items.append("Sapling")
             # we should only look for plants that are not harvested
             obj_lists = world.get_all_of(items, filter_="only_not_harvested")
-            all_objects = []
+            all_objects : list[ObjectModel] = []
             for obj_list in obj_lists.values():
                 all_objects = [*all_objects, *obj_list]
-            locations = [obj.position for obj in all_objects]
+            locations = [obj.position() for obj in all_objects]
             if len(locations) == 0:
                 self.secondary_action = ("explore", modeling.world_model)
             else:
-                self.choose_destination(locations, modeling.world_model.player.position, all_objects)
+                self.choose_destination(locations, modeling.player_position(), all_objects)
         elif self.primary_action[0] == "craft":
             self.secondary_action = ("craft", self.primary_action[1])
         elif self.primary_action[0] == "unequip":
@@ -98,15 +98,15 @@ class DecisionMaking:
                 "Nightmare1", "Nightmare2", "Werepig", "Mosquito"
             ]
             monster_lists = modeling.world_model.get_all_of(monsters)
-            all_objects = []
+            all_objects : list[ObjectModel | MobModel] = []
             for monster_list in monster_lists.values():
                 all_objects = [*all_objects, *monster_list]
-            locations = [obj.position for obj in all_objects]
-            distances = [location.distance(modeling.player_model.position) for location in locations]
+            locations = [obj.position() for obj in all_objects]
+            distances = [location.distance(modeling.player_position()) for location in locations]
             if len(distances) > 0:
                 closest_index = min(range(len(distances)), key=distances.__getitem__)
                 if distances[closest_index] < MONSTER_DANGER_DISTANCE:
-                    self.run_away_from(locations[closest_index], modeling.player_model.position)
+                    self.run_away_from(locations[closest_index], modeling.player_position())
 
     # helps with inventory management
     def inventory_management_system(self, modeling: Modeling) -> None:
@@ -176,31 +176,48 @@ class DecisionMaking:
 
     # main function that should be called
     def decide(self, modeling):
-        if self.measure_time:
-            t1 = time.time_ns()
-
         self.primary_system(modeling)
-
-        if self.measure_time:
-            t2 = time.time_ns()
-
         self.secondary_system(modeling)
-
-        if self.measure_time:
-            t3 = time.time_ns()
-            
         self.inventory_management_system(modeling)
-
-        if self.measure_time:
-            t4 = time.time_ns()
-            
         self.emergency_system(modeling)
-
-        if self.measure_time:
-            t5 = time.time_ns()
-            self.time_records.append([t2-t1, t3-t2, t4-t3, t5-t4])
-            
-
+        
         if self.debug:
             self.records.append((self.primary_action, self.textify(self.secondary_action)))
             return (self.primary_action, self.secondary_action)
+
+class DecisionMakingTimer(DecisionMaking):
+    def __init__(self, debug=False):
+        super().__init__(debug)
+        self.time_records = []
+        self.split_names = ["primary_system", "secondary_system", "emergency_system", "inventory_management_system"]
+        self.current_time_list = []
+
+    def primary_system(self, modeling: Modeling) -> None:
+        t1 = time.time_ns()
+        super().primary_system(modeling)
+        t2  = time.time_ns()
+        self.current_time_list.append(t2-t1)
+    
+    def secondary_system(self, modeling: Modeling) -> None:
+        t1 = time.time_ns()
+        super().secondary_system(modeling)
+        t2  = time.time_ns()
+        self.current_time_list.append(t2-t1)
+    
+    def emergency_system(self, modeling: Modeling) -> None:
+        t1 = time.time_ns()
+        super().emergency_system(modeling)
+        t2  = time.time_ns()
+        self.current_time_list.append(t2-t1)
+    
+    def inventory_management_system(self, modeling: Modeling) -> None:
+        t1 = time.time_ns()
+        super().inventory_management_system(modeling)
+        t2  = time.time_ns()
+        self.current_time_list.append(t2-t1)
+
+    def decide(self, modeling):
+        self.current_time_list = []
+        return_value = super().decide(modeling)
+        self.time_records.append(self.current_time_list.copy())
+        return return_value

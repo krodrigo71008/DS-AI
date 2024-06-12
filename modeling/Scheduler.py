@@ -21,16 +21,19 @@ class Scheduler:
         # the [0] gets the 'timestamp' in which the change should happen
         while len(self.update_queue) > 0 and self.update_queue[0][0] <= self.clock.time():
             tup = heapq.heappop(self.update_queue)
-            pos = tup[2]
-            change = tup[3]
-            instance = tup[4]
+            change = tup[2]
+            instance = tup[3]
             if change == "disappear":
-                self.world_model.remove_object(instance, pos)
+                self.world_model.remove_object(instance)
             else:
                 instance.update(change)
     
-    def schedule_change(self, time_from_now : GameTime, position : Point2d, change : str, instance : ObjectModel):
-        heapq.heappush(self.update_queue, (self.clock.time_from_now(time_from_now), time.time(), position, change, instance))
+    def schedule_change(self, time_from_now : GameTime, change : str, instance : ObjectModel):
+        try:
+            heapq.heappush(self.update_queue, (self.clock.time_from_now(time_from_now), time.time_ns(), change, instance))
+        except TypeError:
+            time.sleep(0.01)
+            heapq.heappush(self.update_queue, (self.clock.time_from_now(time_from_now), time.time_ns(), change, instance))
 
 class SchedulerMock(Scheduler):
     def __init__(self, clock : Clock, world_model : WorldModel):

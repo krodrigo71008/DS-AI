@@ -11,7 +11,7 @@ mon = {"top": SCREEN_POS["top"], "left": SCREEN_POS["left"],
 
 
 class SegmentationModel:
-    def __init__(self, debug=False, queue=None, measure_time=False):
+    def __init__(self, debug=False, queue=None):
         self.model = torch.jit.load("perception/segmentation/model_scripted.pt")
         self.model.to("cuda")
         self.model.eval()
@@ -20,11 +20,6 @@ class SegmentationModel:
         self.debug = debug
         if self.debug:
             self.queue = queue
-            
-        self.measure_time = measure_time
-        if self.measure_time:
-            self.time_records = []
-            self.split_names = ["screenshot", "process_frame", "put_in_debug_queue"]
 
         self.mean = np.array([0.485, 0.456, 0.406])
         self.std = np.array([0.229, 0.224, 0.225])
@@ -41,13 +36,15 @@ class SegmentationModel:
 
         return x
 
-    def get_screenshot(self):
+    def get_screenshot(self, frame : np.ndarray = None) -> np.ndarray:
+        if frame is not None:
+            return frame
         img = np.asarray(self.sct.grab(mon)) # this is in BGRA
         no_alpha_img = img[:, :, :3]
         no_alpha_img = no_alpha_img[:, :, ::-1]
         return no_alpha_img # this is in RGB
 
-    def process_frame(self, frame : np.array):
+    def process_frame(self, frame : np.ndarray) -> np.ndarray:
         with torch.no_grad():
             frame = self.preprocess_input(frame)
             frame = np.transpose(frame, (2, 0, 1))
@@ -62,40 +59,60 @@ class SegmentationModel:
         
         return prediction
 
-    def perceive(self, frame : np.array = None) -> np.array:
-        if self.measure_time:
-            t1 = time.time_ns()
-
-        if frame is None:
-            frame = self.get_screenshot() # takes like 30 ms avg
-
-        if self.measure_time:
-            t2 = time.time_ns()
-
-        prediction = self.process_frame(frame) # takes like 30 ms avg
-
-        if self.measure_time:
-            t3 = time.time_ns()
-
-
+    def put_in_queue(self, prediction) -> None:
         if self.debug:
-            try:
-                self.queue.put(("segmentation_results", prediction)) # takes like 20 ms avg
-            except ValueError:
-                print("segmentation debug_queue closed")
+            if self.queue is not None and self.queue.empty():
+                try:
+                    self.queue.put(("segmentation_results", prediction)) # takes like 20 ms avg
+                except ValueError:
+                    print("segmentation debug_queue closed")
 
-        if self.measure_time:
-            t4 = time.time_ns()
-            self.time_records.append([t2-t1, t3-t2, t4-t3])
+    def perceive(self, frame : np.ndarray = None) -> np.ndarray:
+        frame = self.get_screenshot(frame) # takes like 30 ms avg
+        prediction = self.process_frame(frame) # takes like 30 ms avg
+        self.put_in_queue(prediction)
 
         return prediction
 
 class SegmentationRecorder(SegmentationModel):
     def __init__(self, debug=False, queue=None):
-        self.all_captured_images : list[np.array] = []
+        self.all_captured_images : list[np.ndarray] = []
         super().__init__(debug, queue)
 
-    def get_screenshot(self):
-        ans = super().get_screenshot()
+    def get_screenshot(self, frame: np.ndarray = None) -> np.ndarray:
+        ans = super().get_screenshot(frame)
         self.all_captured_images.append(ans)
         return ans
+
+class SegmentationTimer(SegmentationModel):
+    def __init__(self, debug=False, queue=None):
+        self.time_records = []
+        self.split_names = ["screenshot", "process_frame", "put_in_debug_queue"]
+        self.current_time_list = []
+        super().__init__(debug, queue)
+    
+    def get_screenshot(self, frame: np.ndarray = None) -> np.ndarray:
+        t1 = time.time_ns()
+        return_value = super().get_screenshot(frame)
+        t2  = time.time_ns()
+        self.current_time_list.append(t2-t1)
+        return return_value
+    
+    def process_frame(self, frame: np.ndarray) -> np.ndarray:
+        t1 = time.time_ns()
+        return_value = super().process_frame(frame)
+        t2  = time.time_ns()
+        self.current_time_list.append(t2-t1)
+        return return_value
+    
+    def put_in_queue(self, prediction) -> None:
+        t1 = time.time_ns()
+        super().put_in_queue(prediction)
+        t2  = time.time_ns()
+        self.current_time_list.append(t2-t1)
+    
+    def perceive(self, frame: np.ndarray = None) -> np.ndarray:
+        self.current_time_list = []
+        return_value = super().perceive(frame)
+        self.time_records.append(self.current_time_list.copy())
+        return return_value

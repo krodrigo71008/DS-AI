@@ -52,7 +52,7 @@ def try_out_modeling_with_recorded_inputs():
             control.control(decision_making, modeling)
             file_path_final = file.split('\\')[-1]
             vis_screen.export_results(f"tests/test_results/test_modeling_with_recorded/{file_path_final}")
-            # print(f"{time.time() - start_time:.2f}: {modeling.player_model.position}, go_to {route[route_index]}, keys {control.key_action}")
+            # print(f"{time.time() - start_time:.2f}: {modeling.player_position()}, go_to {route[route_index]}, keys {control.key_action}")
         i += 1
         if i == LIMIT_IMAGES:
             break

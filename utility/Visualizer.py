@@ -1,14 +1,17 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import numpy as np
 from PIL import Image, ImageFont, ImageDraw
 
-from modeling.Modeling import Modeling
-from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
 from perception.constants import SCREEN_SIZE, SEGMENTATION_INPUT_SIZE
-from modeling.constants import CHUNK_SIZE, DISTANCE_FOR_SAME_OBJECT, TILE_SIZE
-from modeling.TerrainTile import TerrainTile
-from utility.Point2d import Point2d
+from modeling.constants import CHUNK_SIZE, TILE_SIZE
 from utility.utility import draw_annotations, get_multiples_in_range, get_color_representation_dict
+if TYPE_CHECKING:
+    from modeling.Modeling import Modeling
+    from modeling.objects.ObjectModel import ObjectModel
+    from modeling.TileManager import TileManager
+    from utility.Point2d import Point2d
 
 class Visualizer:
     # things we want here:
@@ -64,11 +67,11 @@ class Visualizer:
         self.last_segmentation_image = None
         self.last_warped_image = None
     
-    def update_yolo_image(self, image : np.array) -> None:
+    def update_yolo_image(self, image : np.ndarray) -> None:
         """Updates the yolo image part of the visualization screen
 
         :param image: yolo input in BGR
-        :type image: np.array
+        :type image: np.ndarray
         """
         # converting BGR to RGB
         self.perception_image = image[:, :, ::-1]
@@ -102,19 +105,19 @@ class Visualizer:
         self.draw.text((self.yolo_border[0]+yolo_size[0]//2, self.yolo_border[1]+yolo_size[1]//2), 
             "+", fill="red", font=self.font, anchor="mm")
 
-    def update_segmentation_image(self, image : np.array) -> None:
+    def update_segmentation_image(self, image : np.ndarray) -> None:
         """Updates the segmentation image part of the visualization screen
 
         :param image: segmentation input in RGB
-        :type image: np.array
+        :type image: np.ndarray
         """
         self.segmentation_image = Image.fromarray(image)
     
-    def draw_segmentation_results(self, results : np.array) -> None:
+    def draw_segmentation_results(self, results : np.ndarray) -> None:
         """Draw segmentation results
 
         :param results: segmentation output
-        :type results: np.array
+        :type results: np.ndarray
         """
         segmentation_size = (SCREEN_SIZE["width"]//2, SCREEN_SIZE["height"]//2)
         classes_image = Image.fromarray(results.astype("uint8"), mode="P")
@@ -145,7 +148,6 @@ class Visualizer:
         :type modeling: Modeling
         """
         objects = modeling.world_model.object_lists
-        player = modeling.player_model
         vision_corners = (modeling.world_model.c1, modeling.world_model.c2, modeling.world_model.c3, modeling.world_model.c4)
         deletion_corners = (modeling.world_model.c1_deletion_border,
                             modeling.world_model.c2_deletion_border,
@@ -153,38 +155,37 @@ class Visualizer:
                             modeling.world_model.c4_deletion_border)
         origin_coordinates = modeling.world_model.origin_coordinates
         recent_objects = modeling.world_model.recent_objects
-        estimation_pairs = modeling.world_model.estimation_pairs
         # draw outline
         self.draw.rectangle((0, 0, 
                         self.WORLD_CANVAS_WIDTH, self.WORLD_CANVAS_HEIGHT), 
                         outline="red")
-        world_objects : list[tuple[str, Point2d]] = []
+        world_objects : list[tuple[str, Point2d], tuple[float, float]] = []
         for name, object_list in objects.items():
             obj_id = objects_info.get_item_info(info="obj_id", name=name)
             for obj in object_list:
-                world_objects.append((obj_id, obj.position))
-        player_position = player.position
-        player_position_no_corrections = player.position_before_correction
+                world_objects.append((obj_id, obj.position(), obj.std()))
+        player_position = modeling.player_position()
+        player_std = modeling.player_std()
         new_recent_obj = [obj_pair[0] for obj_pair in recent_objects]
-        terrain_tiles = modeling.world_model.tiles
-        self.draw_world_model(world_objects, player_position, player_position_no_corrections,
+        tile_manager = modeling.world_model.tile_manager
+        self.draw_world_model(world_objects, player_position, player_std,
                                 vision_corners, deletion_corners, origin_coordinates, 
-                                new_recent_obj, estimation_pairs, terrain_tiles)
+                                new_recent_obj, tile_manager)
 
-    def draw_world_model(self, world_objects : list[tuple[str, Point2d]], player_position : Point2d, player_position_no_corrections : Point2d,
+    def draw_world_model(self, world_objects : list[tuple[str, Point2d, tuple[float, float]]], player_position : Point2d,
+                            player_std : tuple[float, float],
                             vision_corners : tuple[Point2d, Point2d, Point2d, Point2d], 
                             deletion_corners : tuple[Point2d, Point2d, Point2d, Point2d], 
                             origin_coordinates : Point2d, recent_objects : list[ObjectModel], 
-                            estimation_pairs : list[tuple[str, Point2d, Point2d]],
-                            terrain_tiles : dict[tuple[int, int], TerrainTile]) -> None:
+                            tile_manager : TileManager) -> None:
         """Draw world model
 
         :param world_objects: list of relevant world objects
         :type world_objects: list[tuple[str, Point2d]]
         :param player_position: player position before corrections
         :type player_position: Point2d
-        :param player_position_no_corrections: player position after corrections
-        :type player_position_no_corrections: Point2d
+        :param player_std: player position standard deviation
+        :type player_std: tuple[float, float]
         :param vision_corners: region currently on screen
         :type vision_corners: tuple[Point2d, Point2d, Point2d, Point2d]
         :param deletion_corners: region that is being considered for deletion
@@ -193,39 +194,28 @@ class Visualizer:
         :type origin_coordinates: Point2d
         :param recent_objects: objects that have been detected but not yet added to the world model
         :type recent_objects: list[ObjectModel]
-        :param estimation_pairs: list of tuples of object name, estimated position and model position
-        :type estimation_pairs: list[tuple[str, Point2d, Point2d]]
+        :param tile_manager: world model tile manager
+        :type tile_manager: TileManager
         """
         if player_position is not None:
             x1_range = (player_position.x1 - self.CLOSE_OBJECTS_X1/2, player_position.x1 + self.CLOSE_OBJECTS_X1/2)
             x2_range = (player_position.x2 - self.CLOSE_OBJECTS_X2/2, player_position.x2 + self.CLOSE_OBJECTS_X2/2)
-            self.draw_tiles(terrain_tiles, TILE_SIZE, x1_range, x2_range)
+            self.draw_tiles(tile_manager, TILE_SIZE, x1_range, x2_range)
             # black for objects in world model
-            for obj_id, position in world_objects:
+            for obj_id, position, std in world_objects:
                 if position.x1 > x1_range[0] and position.x1 < x1_range[1] and position.x2 > x2_range[0] and position.x2 < x2_range[1]:
-                    self.write_canvas(position.x1, position.x2, x1_range, x2_range, str(obj_id), "black")
-            # estimation_pair is (estimate, position in modeling)
-            # gray for estimates
-            for name, estimate, model_position in estimation_pairs:
-                if estimate.x1 > x1_range[0] and estimate.x1 < x1_range[1] and estimate.x2 > x2_range[0] and estimate.x2 < x2_range[1]:
-                    obj_id = objects_info.get_item_info(info="obj_id", name=name)
-                    self.write_canvas(estimate.x1, estimate.x2, x1_range, x2_range, str(obj_id), "#444444")
-                    self.write_canvas(model_position.x1, model_position.x2, x1_range, x2_range, str(obj_id), "orangered")
-                    self.draw_line_world_canvas(estimate.x1, estimate.x2, model_position.x1, model_position.x2, x1_range, x2_range)
+                    self.write_canvas(position.x1, position.x2, x1_range, x2_range, str(obj_id), "black", std)
             # blue for recent objects
             for obj in recent_objects:
                 name = obj.name_str()
-                position = obj.position
+                position = obj.position()
+                std = obj.std()
                 if position.x1 > x1_range[0] and position.x1 < x1_range[1] and position.x2 > x2_range[0] and position.x2 < x2_range[1]:
                     obj_id = objects_info.get_item_info(info="obj_id", name=name)
-                    self.write_canvas(position.x1, position.x2, x1_range, x2_range, str(obj_id), "blue")
+                    self.write_canvas(position.x1, position.x2, x1_range, x2_range, str(obj_id), "blue", std)
 
             # player position related
-            self.write_canvas(player_position_no_corrections.x1, player_position_no_corrections.x2, x1_range, x2_range, "P", "#444444")
-            self.write_canvas(player_position.x1, player_position.x2, x1_range, x2_range, "P", "black")
-            self.draw_line_world_canvas(player_position.x1, player_position.x2, 
-                                        player_position_no_corrections.x1, player_position_no_corrections.x2, 
-                                        x1_range, x2_range)
+            self.write_canvas(player_position.x1, player_position.x2, x1_range, x2_range, "P", "black", player_std)
 
             self.write_canvas(origin_coordinates.x1 ,origin_coordinates.x2,  x1_range, x2_range, "O", "red")
             self.draw_quadrilateral_world_canvas(vision_corners, x1_range, x2_range, "black")
@@ -240,22 +230,6 @@ class Visualizer:
     
     def redraw_world_model_image(self):
         self.image.paste(self.last_warped_image, self.warped_position)
-
-    def draw_estimation_errors(self, estimation_errors : list[Point2d]):
-        # draw outline
-        self.draw.rectangle((self.error_position[0], self.error_position[1], 
-                        self.error_position[0]+self.ERROR_CANVAS_WIDTH, self.error_position[1]+self.ERROR_CANVAS_HEIGHT), 
-                        outline="black")
-        self.draw.arc((self.error_position[0], self.error_position[1], 
-                        self.error_position[0]+self.ERROR_CANVAS_WIDTH, self.error_position[1]+self.ERROR_CANVAS_HEIGHT),
-                        0, 360, fill="blue", width=1)
-        center_x = self.error_position[0] + self.ERROR_CANVAS_WIDTH//2
-        center_y = self.error_position[1] + self.ERROR_CANVAS_HEIGHT//2
-        for error in estimation_errors:
-            self.draw.line((center_x, center_y, 
-                    center_x+error.x2*self.MAX_ERROR_LENGTH/DISTANCE_FOR_SAME_OBJECT, 
-                    center_y+error.x1*self.MAX_ERROR_LENGTH/DISTANCE_FOR_SAME_OBJECT), fill="black", width=2)
-        self.draw.text((center_x, center_y), "O", fill="red", font=self.font, anchor="mm")
 
     def draw_line_world_canvas(self, p1_x1, p1_x2, p2_x1, p2_x2, x1_range, x2_range):
         conv_est_x, conv_est_y = self.convert_world_coords_to_world_graph(p1_x1, p1_x2, x1_range, x2_range)
@@ -287,16 +261,16 @@ class Visualizer:
         self.draw.polygon([p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, p4_x, p4_y], outline=color)
 
     
-    def draw_tiles(self, terrain_tiles: dict[tuple[int, int], TerrainTile], tile_size : int, x1_range : tuple[int, int], x2_range : tuple[int, int]):
+    def draw_tiles(self, tile_manager: TileManager, tile_size : int, x1_range : tuple[int, int], x2_range : tuple[int, int]):
         x1_lines = get_multiples_in_range(tile_size, x1_range)
         x2_lines = get_multiples_in_range(tile_size, x2_range)
         color_dict = get_color_representation_dict()
         for x1 in x1_lines:
             for x2 in x2_lines:
                 if x1 + tile_size < x1_range[1] and x2 + tile_size < x2_range[1]:
-                    if (int(x1//tile_size), int(x2//tile_size)) not in terrain_tiles:
+                    tile_type = tile_manager.get_tile((int(x1//tile_size), int(x2//tile_size)))
+                    if tile_type is None:
                         continue
-                    tile_type = terrain_tiles[int(x1//tile_size), int(x2//tile_size)].type
                     lx, ly = self.convert_world_coords_to_world_graph(x1, x2, x1_range, x2_range)
                     rx, ry = self.convert_world_coords_to_world_graph(x1+tile_size, x2+tile_size, x1_range, x2_range)
                     color = color_dict[tile_type][1]
@@ -308,6 +282,14 @@ class Visualizer:
         self.image = Image.new(mode="RGB", size=(SCREEN_SIZE["width"], SCREEN_SIZE["height"]), color="white")
         self.draw = ImageDraw.Draw(self.image)
 
-    def write_canvas(self, x1, x2, x1_range, x2_range, text, color):
+    def reset(self):
+        self.image = Image.new(mode="RGB", size=(SCREEN_SIZE["width"], SCREEN_SIZE["height"]), color="white")
+        self.draw = ImageDraw.Draw(self.image)
+
+    def write_canvas(self, x1, x2, x1_range, x2_range, text, color, std=None):
         x, y = self.convert_world_coords_to_world_graph(x1, x2, x1_range, x2_range)
         self.draw.text((x, y), text, fill=color, font=self.font, anchor="mm")
+        if std is not None:
+            std_x1, std_y1 = self.convert_world_coords_to_world_graph(x1 - std[0], x2 - std[1], x1_range, x2_range)
+            std_x2, std_y2 = self.convert_world_coords_to_world_graph(x1 + std[0], x2 + std[1], x1_range, x2_range)
+            self.draw.ellipse([(std_x1, std_y1), (std_x2, std_y2)], outline="gray")

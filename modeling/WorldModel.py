@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import math
 import time
 import queue
@@ -10,35 +12,40 @@ from PIL import Image
 
 from perception.ImageObject import ImageObject
 from perception.constants import SCREEN_SIZE, SEGMENTATION_INPUT_SIZE
-from modeling.PlayerModel import PlayerModel
 from modeling.mobs.MobModel import MobModel
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from modeling.Factory import factory
-from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_TO_ADMIT_OBJECT, CYCLES_FOR_MOB_REMOVAL
+from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_TO_ADMIT_OBJECT, CYCLES_TO_ADMIT_MOB
 from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING, CHUNK_SIZE, DISTANCE_FOR_VALID_PLAYER_POSITION
-from modeling.constants import TILE_SIZE
+from modeling.constants import TILE_SIZE, FOLLOW_HEIGHT
 from modeling.ObjectsInfo import objects_info
-from modeling.TerrainTile import TerrainTile
 from modeling.Scheduler import Scheduler
+from modeling.SlamIndexManager import SlamIndexManager
+from modeling.TileManager import TileManager
+from modeling.utility import local_to_almost_global_position
 from utility.Clock import Clock
 from utility.Point2d import Point2d
 from utility.utility import is_inside_convex_polygon, get_color_representation_dict
+if TYPE_CHECKING:
+    from modeling.Modeling import Modeling
+
 
 
 class WorldModel:
-    def __init__(self, player : PlayerModel, clock : Clock, debug : bool = False, measure_time : bool = False):
+    def __init__(self, modeling : Modeling, clock : Clock, debug : bool = False):
         """Generates the world model. It should be noted that the full workflow for a cycle of updating is:
             - if player was detected (on perception), call player_detected()
             - call start_cycle()
             - for each object detected, call object_detected()
             - after all that, call finish_cycle()
 
-        :param player: the player model
-        :type player: PlayerModel
+        :param modeling: the modeling model
+        :type modeling: Modeling
         :param clock: a clock to keep track of how much time passed since the last update
         :type clock: Clock
         """
+        self.modeling = modeling
         # maps object name to the object list
         self.object_lists : dict[str, list[ObjectModel]] = {}
         # objects_by_chunks maps a chunk index to a list of objects in it
@@ -48,11 +55,9 @@ class WorldModel:
         self.explored_chunks = set()
         self.objects_detected_this_cycle : list[list[ObjectModel, bool]] = {}
         self.mobs_detected_this_cycle : list[list[MobModel, bool]] = {}
-        self.player : PlayerModel = player
         self.latest_detected_player_position : Point2d = None
         self.cycles_since_player_detected : int = 0
-        self.origin_coordinates : Point2d = player.position
-        self.FOLLOW_HEIGHT = 1.5 # extracted from the game code
+        self.origin_coordinates : Point2d = Point2d(modeling.xEst[0, 0], modeling.xEst[1, 0])
         self.clock : Clock = clock
         self.c1 : Point2d = None # for usual values, (2.202, -36.468)
         self.c2 : Point2d = None # for usual values, (16.263, -2.791)
@@ -67,24 +72,18 @@ class WorldModel:
         self.c2_deletion_border : Point2d = None
         self.c3_deletion_border : Point2d = None
         self.c4_deletion_border : Point2d = None
-        self.estimation_errors : list[Point2d] = []
-        self.estimation_pairs : list[tuple[str, Point2d, Point2d]] = []
-        self.avg_observed_error : Point2d = None
         self.recent_objects : list[list[ObjectModel, int]] = []
         self.recent_mobs : list[list[MobModel, int]] = []
         self.additions_to_recent_objects : list[list[ObjectModel, int]] = []
         self.additions_to_recent_mobs : list[list[MobModel, int]] = []
         self.hovering_object : ObjectModel = None
-        # i, j index is leftuppermost corner (to get i, j for x, y, divide by TILE_SIZE and round down)
-        self.tiles : dict[tuple[int, int], TerrainTile] = {}
+        self.tile_manager : TileManager = TileManager()
+        self._THRESHOLD_FOR_EXPLORED : float = 0.7
         self.scheduler = Scheduler(self.clock, self)
-        self.yolo_timestamp : float = None
+        self.slam_index_manager = SlamIndexManager()
         self.segmentation_timestamp : float = None
         self.debug = debug
         self.latest_debug_image : Image.Image = None
-        self.measure_time = measure_time
-        if self.measure_time:
-            self.time_records_list = []
 
     @staticmethod
     def coords_to_chunk_coords(p : Point2d) -> Point2d:
@@ -99,31 +98,41 @@ class WorldModel:
         x2 = p.x2 - math.floor(p.x2/CHUNK_SIZE)*CHUNK_SIZE
         return Point2d(x1, x2)
 
-    def remove_object(self, instance : ObjectModel, pos : Point2d) -> None:
+    @staticmethod
+    def tile_to_chunk_index(i : int, j : int) -> tuple[int, int]:
+        """Maps tile index to which chunk it is in
+
+        :param i: tile index 1
+        :type i: int
+        :param j: tile index 2
+        :type j: int
+        :return: chunk index
+        :rtype: tuple[int, int]
+        """
+        return Point2d(i // (CHUNK_SIZE // TILE_SIZE), j // (CHUNK_SIZE // TILE_SIZE))
+
+    def remove_object(self, obj : ObjectModel) -> None:
         """Remove object from world model
 
-        :param instance: object instance
-        :type instance: ObjectModel
-        :param pos: position in the world
-        :type pos: Point2d
+        :param obj: object obj
+        :type obj: ObjectModel
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-
-        self.objects_by_chunks[self.point_to_chunk_index(pos)].remove(instance)
-        self.object_lists[instance.name_str()].remove(instance)
-
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("remove_object", t2-t1))
+        chunk_index = self.point_to_chunk_index(obj.position())
+        # if obj is in the chunk we expect it to be
+        if chunk_index in self.objects_by_chunks.keys() and obj in self.objects_by_chunks[chunk_index]:
+            self.objects_by_chunks[chunk_index].remove(obj)
+        else:
+            self.remove_object_from_chunk_lists(obj)
+        
+        self.object_lists[obj.name_str()].remove(obj)
         
 
-    def warp_image_to_ground(self, image: np.array, heading : float, pitch : float, 
-                             distance : float, fov : float) -> tuple[np.array, tuple[float, float], tuple[float, float]]:
+    def warp_image_to_ground(self, image: np.ndarray, heading : float, pitch : float, 
+                             distance : float, fov : float) -> tuple[np.ndarray, tuple[float, float], tuple[float, float]]:
         """Warp image to transform a camera image to the ground coordinates
 
         :param image: game image from camera's perspective
-        :type image: np.array
+        :type image: np.ndarray
         :param heading: camera heading
         :type heading: float
         :param pitch: camera pitch
@@ -133,11 +142,8 @@ class WorldModel:
         :param fov: camera FOV
         :type fov: float
         :return: warped image, x range and y range relative to the player
-        :rtype: tuple[np.array, tuple[float, float], tuple[float, float]]
+        :rtype: tuple[np.ndarray, tuple[float, float], tuple[float, float]]
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-
         # f = H / (2*tan(AFOV/2)), f focal distance, H height, AFOV angular FOV
         f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
         cx = SCREEN_SIZE["width"]/2
@@ -147,15 +153,15 @@ class WorldModel:
         matrix = np.array([
             [(-f*math.sin(heading)-cx*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
              (f*math.cos(heading)-cx*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
-             (cx*distance+cx*self.FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"]],
+             (cx*distance+cx*FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"]],
 
             [(f*math.sin(pitch)*math.cos(heading)-cy*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
              (f*math.sin(pitch)*math.sin(heading)-cy*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
-             (f*self.FOLLOW_HEIGHT*math.cos(pitch)+cy*distance+cy*self.FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"]],
+             (f*FOLLOW_HEIGHT*math.cos(pitch)+cy*distance+cy*FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"]],
 
             [-math.cos(pitch)*math.cos(heading),
              -math.cos(pitch)*math.sin(heading),
-             distance+self.FOLLOW_HEIGHT*math.sin(pitch)],
+             distance+FOLLOW_HEIGHT*math.sin(pitch)],
         ])
         
         matrix = np.linalg.inv(matrix)
@@ -187,25 +193,20 @@ class WorldModel:
         
         image = image.astype('uint8')
         res = cv2.warpPerspective(image, matrix, (SEGMENTATION_INPUT_SIZE[0], SEGMENTATION_INPUT_SIZE[1]), flags=cv2.INTER_NEAREST)
-        
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("warp_image_to_ground", t2-t1))
 
         return res, (x_min[0], x_max[0]), (y_min[0], y_max[0])
 
-    def process_segmentation_image(self, image: np.array) -> Image.Image:
+    def process_segmentation_image(self, image: np.ndarray, past_player_position : Point2d) -> Image.Image:
         """Updates tiles based on segmentation info
 
         :param image: segmentation result image
-        :type image: np.array
+        :type image: np.ndarray
+        :param past_player_position: estimated position of the player in the timestamp the segmentation screenshot was taken
+        :type past_player_position: Point2d
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-
         # in openCV, x is right and y is down, but for us x1 is down and x2 is right, so they are inverted
         warped_image, x_range, y_range = self.warp_image_to_ground(image, CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
-        player_pos = self.player.estimate_position_at_timestamp(self.segmentation_timestamp)
+        player_pos = past_player_position
         x_min = x_range[0] + player_pos.x2
         x_max = x_range[1] + player_pos.x2
         y_min = y_range[0] + player_pos.x1
@@ -229,24 +230,16 @@ class WorldModel:
         # kernel_size = x_lines[1] - x_lines[0]
         # conv_kernel = torch.Tensor(np.ones((kernel_size, kernel_size))/kernel_size/kernel_size)
         # res_tensor = torch.Tensor(warped_image[x_lines[0]:x_lines[-1], y_lines[0]:y_lines[-1], :]).unsqueeze(0).permute(0, 3, 1, 2)
-
-        for i in range(len(x_lines)-1):
-            x1 = x_lines[i]
-            x2 = x_lines[i+1]
-            for j in range(len(y_lines)-1):
-                y1 = y_lines[j]
-                y2 = y_lines[j+1]
-                # again, opencv x = x2, opencv y = x1
-                cur_chunk = warped_image[x1:x2, y1:y2]
-                values, counts = np.unique(cur_chunk, return_counts=True)
-                tile_id = values[np.argmax(counts)]
-                tile_x1 = int(left_corner_y // TILE_SIZE) + j
-                tile_x2 = int(left_corner_x // TILE_SIZE) + i
-                if tile_id != 0:
-                    if (tile_x1, tile_x2) not in self.tiles.keys():
-                        self.tiles[(tile_x1, tile_x2)] = TerrainTile(tile_id)
-                    else:
-                        self.tiles[(tile_x1, tile_x2)].add_detection(tile_id)
+        
+        self.tile_manager.add_detections(x_lines, y_lines, warped_image, (int(left_corner_y // TILE_SIZE), int(left_corner_x // TILE_SIZE)))
+        # check if enough tiles were detected to consider the chunk explored
+        chunk_index = self.point_to_chunk_index(past_player_position)
+        tile1 = (chunk_index[0]*(CHUNK_SIZE//TILE_SIZE), chunk_index[1]*(CHUNK_SIZE//TILE_SIZE))
+        tile2 = ((chunk_index[0]+1)*(CHUNK_SIZE//TILE_SIZE) - 1, (chunk_index[1]+1)*(CHUNK_SIZE//TILE_SIZE) - 1)
+        chunk_tiles = self.tile_manager.get_tiles(tile1, tile2)
+        # chunk_tiles being None also means that the chunk wasn't fully explored
+        if chunk_tiles is not None and np.sum(chunk_tiles != 0) >= self._THRESHOLD_FOR_EXPLORED:
+            self.explored_chunks.add(chunk_index)
         
         if self.debug:
             # files = glob.glob(debug_folder_path + "*.png")
@@ -293,23 +286,6 @@ class WorldModel:
             # debug_image.save(debug_image_out)
             self.latest_debug_image = debug_image
 
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("process_segmentation_image", t2-t1))
-
-
-    def decide_if_explored(self, player_position : Point2d) -> bool:
-        """Calculates if the current chunk should be considered explored
-
-        :param player_position: current player position
-        :type player_position: Point2d
-        :return: whether it should be considered explored
-        :rtype: bool
-        """
-        x1 = player_position.x1 - math.floor(player_position.x1/CHUNK_SIZE)*CHUNK_SIZE
-        x2 = player_position.x2 - math.floor(player_position.x2/CHUNK_SIZE)*CHUNK_SIZE
-        return x1 > 0.4*CHUNK_SIZE and x1 < 0.6*CHUNK_SIZE and x2 > 0.4*CHUNK_SIZE and x2 < 0.6*CHUNK_SIZE
-
     @staticmethod
     def point_to_chunk_index(p : Point2d) -> tuple[int, int]:
         """Convert a point to its corresponding chunk index
@@ -321,6 +297,17 @@ class WorldModel:
         """
         return (math.floor(p.x1/CHUNK_SIZE), math.floor(p.x2/CHUNK_SIZE))
     
+    def remove_object_from_chunk_lists(self, obj : ObjectModel) -> None:
+        """Removes object from self.objects_by_chunks
+
+        :param obj: object to be removed
+        :type obj: ObjectModel
+        """
+        for chunk_list in self.objects_by_chunks.values():
+            if obj in chunk_list:
+                chunk_list.remove(obj)
+                return
+
     def required_nearby_chunks(self, p : Point2d) -> list[tuple[int, int]]:
         """Calculates which nearby chunks should be checked for nearby objects (two close objects could be in 
         different chunks if close to a border)
@@ -352,17 +339,10 @@ class WorldModel:
         return required
 
     def update(self) -> None:
-        if self.measure_time:
-            t1 = time.time_ns()
-
         self.scheduler.update()
         for mob_list in self.mob_lists.values():
             for mob in mob_list:
                 mob.update()
-
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("update", t2-t1))
 
     def decide_player_position(self, player_positions : list[Point2d]) -> None:
         """Decide which one of the given possible positions is the real one
@@ -372,10 +352,6 @@ class WorldModel:
         """
         if len(player_positions) == 0:
             return
-        
-        if self.measure_time:
-            t1 = time.time_ns()
-
         player_pos = None
         best_distance = None
         for possibility in player_positions:
@@ -393,14 +369,41 @@ class WorldModel:
             self.latest_detected_player_position = player_pos
             self.cycles_since_player_detected = 0
 
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("decide_player_position", t2-t1))
+    def handle_yolo_info(self, obj_list : list[ImageObject], past_player_position : Point2d) -> tuple[list[float], list[float], list[ImageObject]]:
+        """Prepares the WorldModel to process the detected objects and returns a list of object positions
+
+        :param obj_list: list of objects detected by the Perception layer
+        :type obj_list: list[ImageObject]
+        :param past_player_position: estimated player position at the screenshot time
+        :type past_player_position: Point2d
+        :return: list of object screen positions, list of object xy coordinates and list of image_objs
+        :rtype: tuple[list[float], list[float], list[ImageObject]]
+        """
+        self.start_cycle(past_player_position)
+        detections = []
+        converted_detections = []
+        image_objs = []
+        for obj in obj_list:
+            if objects_info.get_item_info(image_id=obj.id, info="object_type") == "OBJECT":
+                pos = self.object_detected(obj)
+                # converting from global to local position for SLAM
+                pos = pos - past_player_position
+                # for pos, x1 is x and x2 is z
+                bottom_box_point = Point2d.bottom_from_box(obj.box)
+                detections.extend([bottom_box_point.x1, bottom_box_point.x2])
+                converted_detections.extend([pos.x1, pos.x2])
+                image_objs.append(obj)
+            elif objects_info.get_item_info(image_id=obj.id, info="object_type") == "MOB":
+                self.mob_detected(obj)
+        
+        return detections, converted_detections, image_objs
 
 
-    def start_cycle(self, heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, 
-                    distance : float = CAMERA_DISTANCE, fov : float = FOV) -> None:
+    def start_cycle(self, past_player_position : Point2d, heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, 
+                    distance : float = CAMERA_DISTANCE, fov : float = FOV, follow_height : float = FOLLOW_HEIGHT) -> None:
         """Updates origin position and sets objects that should be detected
+        :param past_player_position: player position estimate at the screenshot moment
+        :type past_player_position: Point2d
         :param heading: camera heading
         :type heading: float
         :param pitch: camera pitch
@@ -409,28 +412,31 @@ class WorldModel:
         :type distance: float
         :param fov: camera FOV
         :type fov: float
+        :param follow_height: game follow height
+        :type follow_height: float
 
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-
         # if it's been more than 10 cycles since the last time the player was detected, we'll assume 
         # that the camera is above the player
         if self.cycles_since_player_detected > 10 or self.latest_detected_player_position is None:
-            self.origin_coordinates = self.player.estimate_position_at_timestamp(self.yolo_timestamp)
+            self.origin_coordinates = past_player_position
         else:
             # pos in (x, z) in world coords
-            pos = self.local_to_almost_global_position(self.latest_detected_player_position, heading, pitch, distance, fov)
-            self.origin_coordinates = self.player.estimate_position_at_timestamp(self.yolo_timestamp) - pos
+            pos = local_to_almost_global_position(self.latest_detected_player_position, heading, pitch, distance, fov, follow_height)
+            self.origin_coordinates = past_player_position - pos
         # corners of the trapezoid that we are seeing
-        self.c1 = self.local_to_global_position(Point2d(0, 0), heading, pitch, distance, fov)
-        self.c2 = self.local_to_global_position(Point2d(0, SCREEN_SIZE["height"]), heading, pitch, distance, fov)
-        self.c3 = self.local_to_global_position(Point2d(SCREEN_SIZE["width"], SCREEN_SIZE["height"]), heading, pitch, distance, fov)
-        self.c4 = self.local_to_global_position(Point2d(SCREEN_SIZE["width"], 0), heading, pitch, distance, fov)
-        self.c1_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.1, SCREEN_SIZE["height"]*0.1), heading, pitch, distance, fov)
-        self.c2_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.1, SCREEN_SIZE["height"]*0.9), heading, pitch, distance, fov)
-        self.c3_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.9, SCREEN_SIZE["height"]*0.9), heading, pitch, distance, fov)
-        self.c4_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.9, SCREEN_SIZE["height"]*0.1), heading, pitch, distance, fov)
+        self.c1 = self.local_to_global_position(Point2d(0, 0), heading, pitch, distance, fov, follow_height)
+        self.c2 = self.local_to_global_position(Point2d(0, SCREEN_SIZE["height"]), heading, pitch, distance, fov, follow_height)
+        self.c3 = self.local_to_global_position(Point2d(SCREEN_SIZE["width"], SCREEN_SIZE["height"]), heading, pitch, distance, fov, follow_height)
+        self.c4 = self.local_to_global_position(Point2d(SCREEN_SIZE["width"], 0), heading, pitch, distance, fov, follow_height)
+        self.c1_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.1, SCREEN_SIZE["height"]*0.1), 
+                                                                heading, pitch, distance, fov, follow_height)
+        self.c2_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.1, SCREEN_SIZE["height"]*0.9), 
+                                                                heading, pitch, distance, fov, follow_height)
+        self.c3_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.9, SCREEN_SIZE["height"]*0.9), 
+                                                                heading, pitch, distance, fov, follow_height)
+        self.c4_deletion_border = self.local_to_global_position(Point2d(SCREEN_SIZE["width"]*0.9, SCREEN_SIZE["height"]*0.1), 
+                                                                heading, pitch, distance, fov, follow_height)
         # chunks in the trapezoid view
         cur_chunk_list = self.get_current_chunks()
         # objects in our modeling that should be currently rendered, paired with a flag indicating 
@@ -440,7 +446,7 @@ class WorldModel:
             # we get all the objects that should be currently rendered
             if chunk in self.objects_by_chunks:
                 cur_obj_list.extend([[obj, False] for obj in self.objects_by_chunks[chunk] 
-                                                if is_inside_convex_polygon([self.c1, self.c2, self.c3, self.c4], obj.position)])
+                                                if is_inside_convex_polygon([self.c1, self.c2, self.c3, self.c4], obj.position())])
         self.objects_detected_this_cycle = cur_obj_list
         cur_mob_list = []
         for mob_list in self.mob_lists.values():
@@ -450,60 +456,11 @@ class WorldModel:
         self.objects_detected_this_cycle.extend([[pair[0], False] for pair in self.recent_objects])
         # add recent mobs to the list that we're going to observe whether we detect them this cycle
         self.mobs_detected_this_cycle.extend([[pair[0], False] for pair in self.recent_mobs])
-        self.estimation_errors = []
         self.additions_to_recent_objects = []
         self.additions_to_recent_mobs = []
-        self.estimation_pairs = []
 
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("start_cycle", t2-t1))
-
-    # positions are Point2d
-    def local_to_almost_global_position(self, local_position : Point2d, 
-            heading : float, pitch : float, distance : float, fov : float,  
-            ) -> Point2d:
-        """Converts the local position (2d image position) to an almost global position (could be 3d, 
-        but everything is on the ground)
-
-        :param local_position: object position relative to the top left corner
-        :type local_position: Point2d
-        :param heading: camera heading
-        :type heading: float
-        :param pitch: camera pitch
-        :type pitch: float
-        :param distance: camera distance
-        :type distance: float
-        :param fov: camera FOV
-        :type fov: float
-        :return: position in the world's coordinate system, but with the origin in the point in the screen center
-        :rtype: Point2d
-        """
-        # f = H / (2*tan(AFOV/2)), f focal distance, H height, AFOV angular FOV
-        f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
-        # in opencv, y points down and x points to the right, but in our coordinate system x is down and y to the right 
-        fx = (local_position.x1 - SCREEN_SIZE["width"]/2)/f
-        fy = (local_position.x2 - SCREEN_SIZE["height"]/2)/f
-        heading = heading*math.pi/180
-        pitch = pitch*math.pi/180
-        sin_heading = math.sin(heading)
-        cos_heading = math.cos(heading)
-        sin_pitch = math.sin(pitch)
-        cos_pitch = math.cos(pitch)
-        world_x = (-sin_heading*self.FOLLOW_HEIGHT*fx
-                    -sin_heading*sin_pitch*distance*fx
-                    +cos_heading*sin_pitch*self.FOLLOW_HEIGHT*fy
-                    +cos_heading*distance*fy
-                    -cos_heading*cos_pitch*self.FOLLOW_HEIGHT)/(cos_pitch*fy+sin_pitch)
-        world_z = (cos_heading*self.FOLLOW_HEIGHT*fx
-                    +cos_heading*sin_pitch*distance*fx
-                    +sin_heading*sin_pitch*self.FOLLOW_HEIGHT*fy
-                    +sin_heading*distance*fy
-                    -sin_heading*cos_pitch*self.FOLLOW_HEIGHT)/(cos_pitch*fy+sin_pitch)
-        # in our world model, we'll use (x,z) as the two coordinates
-        return Point2d(world_x, world_z)
-
-    def local_to_global_position(self, local_position : Point2d, heading : float, pitch : float, distance : float, fov : float) -> Point2d:
+    def local_to_global_position(self, local_position : Point2d, heading : float, pitch : float, 
+                                 distance : float, fov : float, follow_height : float) -> Point2d:
         """Converts the local position (2d image position) to the global position (could be 3d, 
         but everything is on the ground)
 
@@ -517,99 +474,48 @@ class WorldModel:
         :type distance: float
         :param fov: camera FOV
         :type fov: float
+        :param follow_height: game follow height
+        :type follow_height: float
         :return: position in the world's coordinate system
         :rtype: Point2d
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-
-        pos = self.local_to_almost_global_position(local_position, heading, pitch, distance, fov)
-
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("local_to_global_position", t2-t1))
+        pos = local_to_almost_global_position(local_position, heading, pitch, distance, fov, follow_height)
 
         return self.origin_coordinates + pos
 
-    def object_detected(self, image_obj : ImageObject) -> None:
+    def object_detected(self, image_obj : ImageObject) -> Point2d:
         # anchor points are usually at the bottom (y) and middle (x)
         pos = self.local_to_global_position(
             Point2d.bottom_from_box(image_obj.box),
-            CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
-        self.handle_object_at_position(image_obj, pos)
-    
-
-    def handle_object_at_position(self, image_obj : ImageObject, pos : Point2d):
-        if self.measure_time:
-            t1 = time.time_ns()
-
-        obj_name = objects_info.get_item_info(info="name", image_id=image_obj.id)
-        required_chunks = [self.point_to_chunk_index(pos)]
-        adj_required_chunks = self.required_nearby_chunks(pos)
-        required_chunks.extend(adj_required_chunks)
-        objects_to_analyze : list[ObjectModel]= []
-        for chunk_index in required_chunks:
-            if chunk_index in self.objects_by_chunks:
-                objects_to_analyze.extend(self.objects_by_chunks[chunk_index])
+            CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV, FOLLOW_HEIGHT)
         
-        # getting object from pair (obj, cycle_count)
-        objects_to_analyze.extend([pair[0] for pair in self.recent_objects])
+        return pos
 
-        best_match : ObjectModel = None
-        lowest_distance : float = None
-        for obj in objects_to_analyze:
-            # if the object is close enough to an already detected object of the same type
-            if pos.distance(obj.position) <= DISTANCE_FOR_SAME_OBJECT and obj.name_str() == obj_name:
-                if best_match is None or obj.position.distance(pos) < lowest_distance:
-                    best_match = obj
-                    lowest_distance = obj.position.distance(pos)
-        
-        if best_match is None:
-            # in this case, I just identified something that's not in the WorldModel yet, so I create a new object1
-            obj = factory.create_object(image_obj.id, pos, image_obj.box, self.scheduler)
+    def create_object(self, image_obj : ImageObject, slam_state_index : int) -> ObjectModel: 
+        # in this case, I just identified something that's not in the WorldModel yet, so I create a new object1
+        obj = factory.create_object(image_obj.id, self.modeling, slam_state_index, image_obj.box, self.slam_index_manager, self.scheduler)
 
-            self.additions_to_recent_objects.append([obj, 1])
-        else:
-            best_match.latest_screen_position = image_obj.box
-            # in this case, I identified an object that's already in my WorldModel or in the recent objects list
-            if best_match in [pair[0] for pair in self.objects_detected_this_cycle]:
-                obj_index = [pair[0] for pair in self.objects_detected_this_cycle].index(best_match)
-                self.objects_detected_this_cycle[obj_index][1] = True
-                # if it's in the recent objects list, update its position
-                if best_match in [pair[0] for pair in self.recent_objects]:
-                    # maybe there's a better way, but for now just update its position
-                    best_match.position = pos
-            if isinstance(best_match, ObjectWithMultipleForms):
-                best_match.handle_object_detected(image_obj.id)
-            # this is the error from the position in modeling to the one being observed now 
-            self.estimation_errors.append(pos - best_match.position)
-            self.estimation_pairs.append((best_match.name_str(), pos, best_match.position))
-            
-        # if obj_name in self.object_lists:
-        #     self.object_lists[obj_name].append(obj)
-        # else:
-        #     self.object_lists[obj_name] = [obj]
-        # if self.point_to_chunk_index(pos) in self.objects_by_chunks:
-        #     self.objects_by_chunks[self.point_to_chunk_index(pos)].append(obj)
-        # else:
-        #     self.objects_by_chunks[self.point_to_chunk_index(pos)] = [obj]
+        self.additions_to_recent_objects.append([obj, 1])
+        return obj
 
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("handle_object_at_position", t2-t1))
+    def matched_object(self, obj : ObjectModel, image_obj : ImageObject) -> None:
+        obj.latest_screen_position = image_obj.box
+        # in this case, I identified an object that's already in my WorldModel or in the recent objects list
+        if obj in [pair[0] for pair in self.objects_detected_this_cycle]:
+            obj_index = [pair[0] for pair in self.objects_detected_this_cycle].index(obj)
+            self.objects_detected_this_cycle[obj_index][1] = True
+        if isinstance(obj, ObjectWithMultipleForms):
+            obj.handle_object_detected(image_obj.id)
 
-    def mob_detected(self, image_obj : ImageObject):
+    def mob_detected(self, image_obj : ImageObject) -> None:
         # anchor points are usually at the bottom (y) and middle (x)
         pos = self.local_to_global_position(
             Point2d.bottom_from_box(image_obj.box),
-            CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+            CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV, FOLLOW_HEIGHT)
         self.handle_mob_at_position(image_obj, pos)
     
 
-    def handle_mob_at_position(self, image_obj : ImageObject, pos : Point2d):
-        if self.measure_time:
-            t1 = time.time_ns()
-
+    def handle_mob_at_position(self, image_obj : ImageObject, pos : Point2d) -> None:
         obj_name = objects_info.get_item_info(info="name", image_id=image_obj.id)
         mobs_to_analyze : list[MobModel]= []
         
@@ -620,7 +526,7 @@ class WorldModel:
         lowest_distance : float = None
         for mob in mobs_to_analyze:
             # if the object is close enough to an already detected object of the same type
-            if pos.distance(mob.position) <= DISTANCE_FOR_SAME_OBJECT and mob.name_str() == obj_name:
+            if pos.distance(mob.position) <= DISTANCE_FOR_SAME_MOB and mob.name_str() == obj_name:
                 if best_match is None or mob.position.distance(pos) < lowest_distance:
                     best_match = mob
                     lowest_distance = mob.position.distance(pos)
@@ -642,17 +548,10 @@ class WorldModel:
                     best_match.position = pos
             best_match.handle_mob_detected(image_obj.id)
 
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("handle_mob_at_position", t2-t1))
-
     def finish_cycle(self) -> None:
         """Marks the end of a modeling cycle, this should be called in the end of update_model() on Modeling.
         It also removes objects that were not detected and should be.
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-        
         self.cycles_since_player_detected += 1
         for pair in self.objects_detected_this_cycle:
             obj = pair[0]
@@ -672,7 +571,13 @@ class WorldModel:
                         self.recent_objects[obj_index][1] = new_count
                 else:
                     # if the object wasn't detected, we remove it
+                    self.modeling.remove_from_slam_state(obj.slam_state_index())
                     del self.recent_objects[obj_index]
+                    self.slam_index_manager.remove_object(obj)
+                    # update index to object mapping
+                    index_ = (obj.slam_state_index() - 2) // 2
+                    assert self.modeling.lm_id_to_object[index_] == obj
+                    del self.modeling.lm_id_to_object[index_]
             # handling the case in which obj is a world model object (object removal if it wasn't detected for
             # many cycles in a row)
             else:
@@ -684,19 +589,20 @@ class WorldModel:
                     if is_inside_convex_polygon([self.c1_deletion_border, 
                                                     self.c2_deletion_border,
                                                     self.c3_deletion_border, 
-                                                    self.c4_deletion_border], obj.position):
+                                                    self.c4_deletion_border], obj.position()):
                         # we shouldn't count down an object for deletion if we're hovering over it
                         if obj != self.hovering_object:
                             obj.countdown_cycles_to_be_deleted()
                             if obj.get_cycles_to_be_deleted() == 0:
-                                obj_name = obj.name_str()
-                                obj_list = self.object_lists[obj_name]
-                                obj_index = obj_list.index(obj)
-                                del obj_list[obj_index]
-                                chunk_index = self.point_to_chunk_index(obj.position)
-                                chunk_obj_list = self.objects_by_chunks[chunk_index]
-                                obj_index_in_chunk_list = chunk_obj_list.index(obj)
-                                del chunk_obj_list[obj_index_in_chunk_list]
+                                self.remove_object(obj)
+                                self.modeling.remove_from_slam_state(obj.slam_state_index())
+                                self.slam_index_manager.remove_object(obj)
+                                
+                                # update index to object mapping
+                                index_ = (obj.slam_state_index() - 2) // 2
+                                assert self.modeling.lm_id_to_object[index_] == obj
+                                del self.modeling.lm_id_to_object[index_]
+                        del obj
 
         for pair in self.mobs_detected_this_cycle:
             mob = pair[0]
@@ -707,7 +613,7 @@ class WorldModel:
                 if detected:
                     new_count = self.recent_mobs[mob_index][1]+1
                     # if the required number of cycles to admit a mob is met, add it to both object_lists and objects_by_chunks
-                    if new_count == CYCLES_FOR_MOB_REMOVAL:
+                    if new_count == CYCLES_TO_ADMIT_MOB:
                         self.add_mob(mob)
                         # also remove it from recent objects
                         del self.recent_mobs[mob_index]
@@ -741,26 +647,33 @@ class WorldModel:
         # adding new recent objects 
         self.recent_objects.extend(self.additions_to_recent_objects)
 
-        avg_error_x1 = 0
-        avg_error_x2 = 0
-        if len(self.estimation_errors) > 0:
-            for err in self.estimation_errors:
-                avg_error_x1 += err.x1
-                avg_error_x2 += err.x2
-            avg_error_x1 /= len(self.estimation_errors)
-            avg_error_x2 /= len(self.estimation_errors)
-            self.avg_observed_error = Point2d(avg_error_x1, avg_error_x2)
-        else:
-            self.avg_observed_error = Point2d(0, 0)
-        
-        # mark current chunk as explored if applicable
-        player_chunk = self.point_to_chunk_index(self.player.estimate_position_at_timestamp(self.yolo_timestamp))
-        if self.decide_if_explored(self.player.estimate_position_at_timestamp(self.yolo_timestamp)):
-            self.explored_chunks.add(player_chunk)
+    # def recheck_object_chunk(self, obj : ObjectModel, pos : tuple[int, int], prev_pos : tuple[int, int]) -> None:
+    #     """Checks if an object is on the correct chunk and moves it if necessary
 
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("finish_cycle", t2-t1))
+    #     :param obj: object that has had its position changed
+    #     :type obj: ObjectModel
+    #     :param pos: position the object has after the change
+    #     :type pos: tuple[int, int]
+    #     :param prev_pos: position the object had before the change
+    #     :type prev_pos: tuple[int, int]
+    #     """
+    #     # return if the object is still recent cause that means it's not in the chunk lists
+    #     if obj in [pair[0] for pair in self.recent_objects]:
+    #         return
+    #     pos = Point2d(pos[0], pos[1])
+    #     chunk_index = self.point_to_chunk_index(pos)
+    #     prev_chunk_index = self.point_to_chunk_index(Point2d(prev_pos[0], prev_pos[1]))
+    #     print(f"Comparing pos {pos.x1:.2f}, {pos.x2:.2f} to prev_pos {prev_pos[0]:.2f}, {prev_pos[1]:.2f}")
+    #     if chunk_index != prev_chunk_index:
+    #         print(f"Changed chunk from {prev_chunk_index} to {chunk_index}")
+    #         chunk_obj_list = self.objects_by_chunks[prev_chunk_index]
+    #         obj_index_in_chunk_list = chunk_obj_list.index(obj)
+    #         del chunk_obj_list[obj_index_in_chunk_list]
+    #         if chunk_index in self.objects_by_chunks:
+    #             self.objects_by_chunks[chunk_index].append(obj)
+    #         else:
+    #             self.objects_by_chunks[chunk_index] = [obj]
+
 
     def get_closest_unexplored_chunk(self) -> tuple[int, int]:
         """Get closest unexplored chunk
@@ -768,14 +681,11 @@ class WorldModel:
         :return: chunk index of the closest unexplored chunk
         :rtype: tuple[int, int]
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-        
         di = [-1, 0, 1, 0]
         dj = [0, 1, 0, -1]
         used_list = set()
         potential_list = queue.Queue()
-        chunk_aux = self.point_to_chunk_index(self.player.position)
+        chunk_aux = self.point_to_chunk_index(self.modeling.player_position())
         while True:
             if chunk_aux not in self.explored_chunks:
                 break
@@ -785,10 +695,6 @@ class WorldModel:
             used_list.add(chunk_aux)
             chunk_aux = potential_list.get()
 
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("get_closest_unexplored_chunk", t2-t1))
-        
         return chunk_aux
 
 
@@ -823,9 +729,6 @@ class WorldModel:
         :return: dict with keys being object names and values being lists of objects
         :rtype: dict[str, list[ObjectModel]]
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-
         result = {}
         for obj in obj_list:
             if obj in self.object_lists.keys():
@@ -924,10 +827,6 @@ class WorldModel:
                         raise ValueError("Filter not implemented")
             else:
                 result[obj] = []
-
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append((f"get_all_of {obj_list}", t2-t1))
         
         return result
     
@@ -942,7 +841,7 @@ class WorldModel:
             self.object_lists[obj_name].append(obj)
         else:
             self.object_lists[obj_name] = [obj]
-        pos = obj.position
+        pos = obj.position()
         if self.point_to_chunk_index(pos) in self.objects_by_chunks:
             self.objects_by_chunks[self.point_to_chunk_index(pos)].append(obj)
         else:
@@ -959,3 +858,245 @@ class WorldModel:
             self.object_lists[mob_name].append(mob)
         else:
             self.object_lists[mob_name] = [mob]
+
+    def H_function(self, x : float, z : float,
+            heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, distance : float = CAMERA_DISTANCE, 
+            fov : float = FOV) -> tuple[float, float]:
+        c_u = SCREEN_SIZE["width"]/2
+        c_v = SCREEN_SIZE["height"]/2
+        heading = heading*math.pi/180
+        pitch = pitch*math.pi/180
+        sin_heading = math.sin(heading)
+        cos_heading = math.cos(heading)
+        sin_pitch = math.sin(pitch)
+        cos_pitch = math.cos(pitch)
+        f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
+        temp1 = ((-f*sin_heading-c_u*cos_pitch*cos_heading)*x+(f*cos_heading-c_u*cos_pitch*sin_heading)*z
+                 +c_u*(distance+FOLLOW_HEIGHT*sin_pitch))
+        temp2 = ((f*sin_pitch*cos_heading-c_v*cos_pitch*cos_heading)*x+(f*sin_pitch*sin_heading-c_v*cos_pitch*sin_heading)*z
+                 +c_v*(distance+FOLLOW_HEIGHT*sin_pitch)+f*FOLLOW_HEIGHT*cos_pitch)
+        temp3 = -cos_pitch*cos_heading*x-cos_pitch*sin_heading*z+distance+FOLLOW_HEIGHT*sin_pitch
+        
+        u = temp1/temp3
+        v = temp2/temp3
+        return (u, v)
+
+    def jacobH_numerical(self, x : float, z : float,
+            heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, distance : float = CAMERA_DISTANCE, 
+            fov : float = FOV) -> np.ndarray:
+        eps = 1e-4
+        t1 = self.H_function(x-eps, z, heading, pitch, distance, fov)
+        t2 = self.H_function(x+eps, z, heading, pitch, distance, fov)
+        t3 = self.H_function(x, z-eps, heading, pitch, distance, fov)
+        t4 = self.H_function(x, z+eps, heading, pitch, distance, fov)
+        u_x = (t2[0] - t1[0])/(2*eps)
+        u_z = (t4[0] - t3[0])/(2*eps)
+        v_x = (t2[1] - t1[1])/(2*eps)
+        v_z = (t4[1] - t3[1])/(2*eps)
+        return np.array([
+            [u_x, u_z],
+            [v_x, v_z]
+        ])
+
+    def jacobH(self, x : float, z : float,
+            heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, distance : float = CAMERA_DISTANCE, 
+            fov : float = FOV) -> np.ndarray:
+        c_u = SCREEN_SIZE["width"]/2
+        c_v = SCREEN_SIZE["height"]/2
+        heading = heading*math.pi/180
+        pitch = pitch*math.pi/180
+        sin_heading = math.sin(heading)
+        cos_heading = math.cos(heading)
+        sin_pitch = math.sin(pitch)
+        cos_pitch = math.cos(pitch)
+        f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
+        temp1 = ((-f*sin_heading-c_u*cos_pitch*cos_heading)*x+(f*cos_heading-c_u*cos_pitch*sin_heading)*z
+                 +c_u*(distance+FOLLOW_HEIGHT*sin_pitch))
+        temp2 = ((f*sin_pitch*cos_heading-c_v*cos_pitch*cos_heading)*x+(f*sin_pitch*sin_heading-c_v*cos_pitch*sin_heading)*z
+                 +c_v*(distance+FOLLOW_HEIGHT*sin_pitch)+f*FOLLOW_HEIGHT*cos_pitch)
+        temp3 = -cos_pitch*cos_heading*x-cos_pitch*sin_heading*z+distance+FOLLOW_HEIGHT*sin_pitch
+        temp3_2 = temp3**2
+        H = np.array([[((-f*sin_heading-c_u*cos_pitch*cos_heading)*temp3+cos_pitch*cos_heading*temp1)/temp3_2, 
+                          ((f*cos_heading-c_u*cos_pitch*sin_heading)*temp3+cos_pitch*sin_heading*temp1)/temp3_2],
+                      [((f*sin_pitch*cos_heading-c_v*cos_pitch*cos_heading)*temp3+cos_pitch*cos_heading*temp2)/temp3_2, 
+                          ((f*sin_pitch*sin_heading-c_v*cos_pitch*sin_heading)*temp3+cos_pitch*sin_heading*temp2)/temp3_2]])
+        return H
+    
+    def jacob_inverseH(self, u : float, v : float,
+            heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, distance : float = CAMERA_DISTANCE, 
+            fov : float = FOV) -> np.ndarray:
+        c_u = SCREEN_SIZE["width"]/2
+        c_v = SCREEN_SIZE["height"]/2
+        u_c = u - c_u
+        v_c = v - c_v
+        heading = heading*math.pi/180
+        pitch = pitch*math.pi/180
+        sin_heading = math.sin(heading)
+        cos_heading = math.cos(heading)
+        sin_pitch = math.sin(pitch)
+        cos_pitch = math.cos(pitch)
+        f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
+
+        temp1 = distance*sin_pitch+FOLLOW_HEIGHT
+        temp2 = distance+FOLLOW_HEIGHT*sin_pitch
+        temp3 = cos_pitch*v_c+f*sin_pitch
+        temp4 = cos_pitch*sin_heading*f*FOLLOW_HEIGHT
+        x_u = -sin_heading*temp1/temp3
+        x_v = (cos_heading*temp2*temp3-cos_pitch*(-sin_heading*temp1*u_c+cos_heading*temp2*v_c-temp4))/temp3**2
+        z_u = cos_heading*temp1/temp3
+        z_v = (sin_heading*temp2*temp3-cos_pitch*(cos_heading*temp1*u_c+sin_heading*temp2*v_c-temp4))/temp3**2
+
+        return np.array([
+            [x_u, x_v],
+            [z_u, z_v]
+        ])
+        
+
+class WorldModelTimer(WorldModel):
+    def __init__(self, modeling: Modeling, clock: Clock, debug: bool = False):
+        super().__init__(modeling, clock, debug)
+        self.time_records_list = []
+
+    def remove_object(self, instance: ObjectModel) -> None:
+        t1 = time.time_ns()
+        super().remove_object(instance)
+        t2  = time.time_ns()
+        self.time_records_list.append(("remove_object", t2-t1))
+    
+    def warp_image_to_ground(self, image: np.ndarray, heading: float, pitch: float, distance: float, fov: float) -> tuple[np.ndarray, tuple[float, float], tuple[float, float]]:
+        t1 = time.time_ns()
+        return_value = super().warp_image_to_ground(image, heading, pitch, distance, fov)
+        t2  = time.time_ns()
+        self.time_records_list.append(("warp_image_to_ground", t2-t1))
+        return return_value
+    
+    def process_segmentation_image(self, image: np.ndarray, past_player_position: Point2d) -> Image:
+        t1 = time.time_ns()
+        return_value = super().process_segmentation_image(image, past_player_position)
+        t2  = time.time_ns()
+        self.time_records_list.append(("process_segmentation_image", t2-t1))
+        return return_value
+    
+    def required_nearby_chunks(self, p: Point2d) -> list[tuple[int, int]]:
+        t1 = time.time_ns()
+        return_value = super().required_nearby_chunks(p)
+        t2  = time.time_ns()
+        self.time_records_list.append(("required_nearby_chunks", t2-t1))
+        return return_value
+    
+    def update(self) -> None:
+        t1 = time.time_ns()
+        super().update()
+        t2  = time.time_ns()
+        self.time_records_list.append(("update", t2-t1))
+    
+    def decide_player_position(self, player_positions: list[Point2d]) -> None:
+        t1 = time.time_ns()
+        super().decide_player_position(player_positions)
+        t2  = time.time_ns()
+        self.time_records_list.append(("decide_player_position", t2-t1))
+    
+    def handle_yolo_info(self, obj_list: list[ImageObject], past_player_position: Point2d) -> tuple[list[float], list[ImageObject]]:
+        t1 = time.time_ns()
+        return_value = super().handle_yolo_info(obj_list, past_player_position)
+        t2  = time.time_ns()
+        self.time_records_list.append(("handle_yolo_info", t2-t1))
+        return return_value
+    
+    def start_cycle(self, past_player_position: Point2d, 
+                    heading: float = CAMERA_HEADING, pitch: float = CAMERA_PITCH, distance: float = CAMERA_DISTANCE, 
+                    fov: float = FOV) -> None:
+        t1 = time.time_ns()
+        super().start_cycle(past_player_position, heading, pitch, distance, fov)
+        t2  = time.time_ns()
+        self.time_records_list.append(("start_cycle", t2-t1))
+    
+    def local_to_global_position(self, local_position: Point2d, heading: float, pitch: float, 
+                                 distance: float, fov: float, follow_height : float) -> Point2d:
+        t1 = time.time_ns()
+        return_value = super().local_to_global_position(local_position, heading, pitch, distance, fov, follow_height)
+        t2  = time.time_ns()
+        self.time_records_list.append(("local_to_global_position", t2-t1))
+        return return_value
+    
+    def create_object(self, image_obj: ImageObject, slam_state_index: int) -> ObjectModel:
+        t1 = time.time_ns()
+        return_value = super().create_object(image_obj, slam_state_index)
+        t2  = time.time_ns()
+        self.time_records_list.append(("create_object", t2-t1))
+        return return_value
+    
+    def matched_object(self, obj: ObjectModel, image_obj: ImageObject) -> None:
+        t1 = time.time_ns()
+        super().matched_object(obj, image_obj)
+        t2  = time.time_ns()
+        self.time_records_list.append(("matched_object", t2-t1))
+    
+    def mob_detected(self, image_obj: ImageObject) -> None:
+        t1 = time.time_ns()
+        super().mob_detected(image_obj)
+        t2  = time.time_ns()
+        self.time_records_list.append(("mob_detected", t2-t1))
+    
+    def handle_mob_at_position(self, image_obj: ImageObject, pos: Point2d) -> None:
+        t1 = time.time_ns()
+        super().handle_mob_at_position(image_obj, pos)
+        t2  = time.time_ns()
+        self.time_records_list.append(("handle_mob_at_position", t2-t1))
+    
+    def finish_cycle(self) -> None:
+        t1 = time.time_ns()
+        super().finish_cycle()
+        t2  = time.time_ns()
+        self.time_records_list.append(("finish_cycle", t2-t1))
+    
+    # def recheck_object_chunk(self, obj: ObjectModel, pos: tuple[int, int], prev_pos: tuple[int, int]) -> None:
+    #     t1 = time.time_ns()
+    #     super().recheck_object_chunk(obj, pos, prev_pos)
+    #     t2  = time.time_ns()
+    #     self.time_records_list.append(("recheck_object_chunk", t2-t1))
+    
+    def get_closest_unexplored_chunk(self) -> tuple[int, int]:
+        t1 = time.time_ns()
+        return_value = super().get_closest_unexplored_chunk()
+        t2  = time.time_ns()
+        self.time_records_list.append(("get_closest_unexplored_chunk", t2-t1))
+        return return_value
+    
+    def get_current_chunks(self) -> list[tuple[int, int]]:
+        t1 = time.time_ns()
+        return_value = super().get_current_chunks()
+        t2  = time.time_ns()
+        self.time_records_list.append(("get_current_chunks", t2-t1))
+        return return_value
+    
+    def get_all_of(self, obj_list: list[str], filter_: str = None) -> dict[str, list[ObjectModel]]:
+        t1 = time.time_ns()
+        return_value = super().get_all_of(obj_list, filter_)
+        t2  = time.time_ns()
+        self.time_records_list.append(("get_all_of", t2-t1))
+        return return_value
+    
+    def add_object(self, obj : ObjectModel) -> None:
+        t1 = time.time_ns()
+        super().add_object(obj)
+        t2  = time.time_ns()
+        self.time_records_list.append(("add_object", t2-t1))
+    
+    def add_mob(self, mob : MobModel) -> None:
+        t1 = time.time_ns()
+        super().add_mob(mob)
+        t2  = time.time_ns()
+        self.time_records_list.append(("add_mob", t2-t1))
+
+class WorldModelSlamMock(WorldModel):
+    def __init__(self, modeling: Modeling, clock: Clock, debug: bool = False):
+        super().__init__(modeling, clock, debug)
+    
+    def matched_object(self, obj: ObjectModel, image_obj: ImageObject) -> None:
+        pass
+    
+    # def recheck_object_chunk(self, obj: ObjectModel, pos: tuple[int, int], prev_pos: tuple[int, int]) -> None:
+    #     pass
+
+    

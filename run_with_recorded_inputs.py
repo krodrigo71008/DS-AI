@@ -5,9 +5,9 @@ import pickle
 import numpy as np
 import pandas as pd
 
-from modeling.Modeling import Modeling
-from perception.Perception import Perception
-from perception.SegmentationModel import SegmentationModel
+from modeling.Modeling import Modeling, ModelingTimer
+from perception.Perception import Perception, PerceptionTimer
+from perception.SegmentationModel import SegmentationModel, SegmentationTimer
 from utility.Clock import ClockMock
 from utility.Visualizer import Visualizer
 
@@ -17,13 +17,19 @@ if __name__ == "__main__":
     should_measure_time = False
     os.makedirs(f"{folder_name}/output", exist_ok=True)
 
-    perception = Perception(measure_time=should_measure_time)
+    if should_measure_time:
+        perception = PerceptionTimer()
+    else:
+        perception = Perception()
     timestamp_files = glob.glob(f"{folder_name}/*_vision_times.npy")
     assert len(timestamp_files) == 1
     vision_timestamps = np.load(timestamp_files[0])
     vision_index = -1
 
-    seg_model = SegmentationModel(measure_time=should_measure_time)
+    if should_measure_time:
+        seg_model = SegmentationTimer()
+    else:
+        seg_model = SegmentationModel()
     timestamp_files = glob.glob(f"{folder_name}/*_segmentation_times.npy")
     assert len(timestamp_files) == 1
     seg_timestamps = np.load(timestamp_files[0])
@@ -41,7 +47,11 @@ if __name__ == "__main__":
     assert len(timestamp_files) == 1
     clock_timestamps = np.load(timestamp_files[0])
     clock = ClockMock(clock_timestamps)
-    modeling = Modeling(clock=clock, debug=True, measure_time=should_measure_time)
+
+    if should_measure_time:
+        modeling = ModelingTimer(clock=clock, debug=True)
+    else:
+        modeling = Modeling(clock=clock, debug=True)
 
     vis_screen = Visualizer()
 
@@ -92,8 +102,8 @@ if __name__ == "__main__":
         modeling.update_model_using_info(detected_objects, segmentation_results)
         # first float is timestamp, second is direction
         while direction_index < len(direction_changes_timestamps) and clock.raw_timestamp() == direction_changes_timestamps[direction_index]:
-            print(f"Direction: {modeling.player_model.direction} to {direction_changes[direction_index]}")
-            modeling.player_model.set_direction(direction_changes[direction_index])
+            print(f"Direction: {modeling._direction} to {direction_changes[direction_index]}")
+            modeling.set_direction(direction_changes[direction_index])
             direction_index += 1
 
         if has_new_segmentation_image:
@@ -102,9 +112,11 @@ if __name__ == "__main__":
             vis_screen.redraw_world_model_image()
 
         vis_screen.update_world_model(modeling)
-        vis_screen.draw_estimation_errors(modeling.world_model.estimation_errors)
         vis_screen.draw_time(clock.time())
-        vis_screen.export_results(f"{folder_name}/output/{clock.current_time_index - 2}.jpg")
+        if has_new_vision_image or has_new_segmentation_image:
+            vis_screen.export_results(f"{folder_name}/output/{clock.current_time_index - 2}.jpg")
+        else:
+            vis_screen.reset()
 
     if should_measure_time:
         # save perception time records
@@ -185,7 +197,7 @@ if __name__ == "__main__":
 #             control.control(decision_making, modeling)
 #             file_path_final = file.split('\\')[-1]
 #             vis_screen.export_results(f"tests/test_results/test_modeling_with_recorded/{file_path_final}")
-#             # print(f"{time.time() - start_time:.2f}: {modeling.player_model.position}, go_to {route[route_index]}, keys {control.key_action}")
+#             # print(f"{time.time() - start_time:.2f}: {modeling.player_position()}, go_to {route[route_index]}, keys {control.key_action}")
 #         i += 1
 #         if i == LIMIT_IMAGES:
 #             break

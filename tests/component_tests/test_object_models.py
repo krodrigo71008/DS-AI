@@ -16,7 +16,7 @@ from utility.GameTime import GameTime
 def test_ashes():
     clock = ClockMock([0, 0, 19.9, 20])
     modeling = Modeling(clock=clock)
-    ashes = Ashes(Point2d(0, 0), Point2d(0, 0), modeling.world_model.scheduler)
+    ashes = Ashes(modeling, 0, Point2d(0, 0), modeling.world_model.scheduler)
     modeling.world_model.add_object(ashes)
     assert len(modeling.world_model.object_lists["Ashes"]) == 1
     assert len(modeling.world_model.objects_by_chunks[(0, 0)]) == 1
@@ -36,8 +36,8 @@ def test_ashes():
 def test_berry_bush():
     clock = ClockMock([0, 0, GameTime(non_winter_days=4.6874).seconds(), GameTime(non_winter_days=4.6875).seconds()])
     modeling = Modeling(clock=clock)
-    berry_bush = BerryBush(Point2d(0, 0), Point2d(0, 0), BERRYBUSH_HARVESTED, modeling.world_model.scheduler)
-    berry_bush_2 = BerryBush(Point2d(0, 0), Point2d(0, 0), BERRYBUSH_READY, modeling.world_model.scheduler)
+    berry_bush = BerryBush(modeling, 0, Point2d(0, 0), BERRYBUSH_HARVESTED, modeling.world_model.scheduler)
+    berry_bush_2 = BerryBush(modeling, 0, Point2d(0, 0), BERRYBUSH_READY, modeling.world_model.scheduler)
     modeling.world_model.add_object(berry_bush)
     modeling.world_model.add_object(berry_bush_2)
     assert len(modeling.world_model.get_all_of(["BerryBush"])["BerryBush"]) == 2
@@ -58,7 +58,7 @@ def test_berry_bush():
 def test_evergreen():
     clock = ClockMock([0, 0, 10*60-1, 10*60, (10+35)*60, (10+35+35)*60, (10+35+35+7.5)*60])
     modeling = Modeling(clock=clock)
-    evergreen = Evergreen(Point2d(0, 0), Point2d(0, 0), EVERGREEN_SMALL, modeling.world_model.scheduler, lumpy=False)
+    evergreen = Evergreen(modeling, 0, Point2d(0, 0), EVERGREEN_SMALL, modeling.world_model.scheduler, lumpy=False)
     modeling.world_model.add_object(evergreen)
     assert len(modeling.world_model.get_all_of(["Evergreen"])["Evergreen"]) == 1
     assert len(modeling.world_model.get_all_of(["Evergreen"], "evergreen_small")["Evergreen"]) == 1
@@ -96,8 +96,8 @@ def test_evergreen():
 def test_grass():
     clock = ClockMock([0, 0, GameTime(non_winter_days=2.9).seconds(), GameTime(non_winter_days=3).seconds()])
     modeling = Modeling(clock=clock)
-    grass = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_HARVESTED, modeling.world_model.scheduler)
-    grass_2 = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_READY, modeling.world_model.scheduler)
+    grass = Grass(modeling, 0, Point2d(0, 0), GRASS_HARVESTED, modeling.world_model.scheduler)
+    grass_2 = Grass(modeling, 0, Point2d(0, 0), GRASS_READY, modeling.world_model.scheduler)
     modeling.world_model.add_object(grass)
     modeling.world_model.add_object(grass_2)
     assert len(modeling.world_model.get_all_of(["Grass"])["Grass"]) == 2
@@ -118,8 +118,8 @@ def test_grass():
 def test_sapling():
     clock = ClockMock([0, 0, GameTime(non_winter_days=3.9).seconds(), GameTime(non_winter_days=4).seconds()])
     modeling = Modeling(clock=clock)
-    sapling = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_HARVESTED, modeling.world_model.scheduler)
-    sapling_2 = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_READY, modeling.world_model.scheduler)
+    sapling = Sapling(modeling, 0, Point2d(0, 0), SAPLING_HARVESTED, modeling.world_model.scheduler)
+    sapling_2 = Sapling(modeling, 0, Point2d(0, 0), SAPLING_READY, modeling.world_model.scheduler)
     modeling.world_model.add_object(sapling)
     modeling.world_model.add_object(sapling_2)
     assert len(modeling.world_model.get_all_of(["Sapling"])["Sapling"]) == 2
@@ -140,8 +140,8 @@ def test_sapling():
 def test_marsh_bush():
     clock = ClockMock([0, 0, GameTime(non_winter_days=3.9).seconds(), GameTime(non_winter_days=4).seconds()])
     modeling = Modeling(clock=clock)
-    marsh_bush = MarshBush(Point2d(0, 0), Point2d(0, 0), MARSH_BUSH_HARVESTED, modeling.world_model.scheduler)
-    marsh_bush_2 = MarshBush(Point2d(0, 0), Point2d(0, 0), MARSH_BUSH_READY, modeling.world_model.scheduler)
+    marsh_bush = MarshBush(modeling, 0, Point2d(0, 0), MARSH_BUSH_HARVESTED, modeling.world_model.scheduler)
+    marsh_bush_2 = MarshBush(modeling, 0, Point2d(0, 0), MARSH_BUSH_READY, modeling.world_model.scheduler)
     modeling.world_model.add_object(marsh_bush)
     modeling.world_model.add_object(marsh_bush_2)
     assert len(modeling.world_model.get_all_of(["MarshBush"])["MarshBush"]) == 2
@@ -164,7 +164,7 @@ def test_spider_nest():
                        GameTime(days=10).seconds()+GameTime(days=10).seconds(), 
                        GameTime(days=10).seconds()+GameTime(days=10).seconds()+GameTime(days=25).seconds()])
     modeling = Modeling(clock=clock)
-    nest = SpiderNest(Point2d(0, 0), Point2d(0, 0), NEST_SMALL, modeling.world_model.scheduler)
+    nest = SpiderNest(modeling, 0, Point2d(0, 0), NEST_SMALL, modeling.world_model.scheduler)
     modeling.world_model.add_object(nest)
     assert len(modeling.world_model.get_all_of(["SpiderNest"])["SpiderNest"]) == 1
     assert len(modeling.world_model.get_all_of(["SpiderNest"], "nest_small")["SpiderNest"]) == 1
@@ -197,27 +197,27 @@ def test_possible_states():
     objects_info = pd.read_csv("utility/objects_info.csv")
     clock = ClockMock([0, 0, GameTime(non_winter_days=4.6874).seconds(), GameTime(non_winter_days=4.6875).seconds()])
     modeling = Modeling(clock=clock)
-    berry_bush = BerryBush(Point2d(0, 0), Point2d(0, 0), BERRYBUSH_HARVESTED, modeling.world_model.scheduler)
+    berry_bush = BerryBush(modeling, 0, Point2d(0, 0), BERRYBUSH_HARVESTED, modeling.world_model.scheduler)
     possible_states = berry_bush.object_ids
     ground_truth = objects_info[objects_info["name"] == "BerryBush"]["image_id"].values
     assert np.all(possible_states == ground_truth)
-    grass = Grass(Point2d(0, 0), Point2d(0, 0), GRASS_HARVESTED, modeling.world_model.scheduler)
+    grass = Grass(modeling, 0, Point2d(0, 0), GRASS_HARVESTED, modeling.world_model.scheduler)
     possible_states = grass.object_ids
     ground_truth = objects_info[objects_info["name"] == "Grass"]["image_id"].values
     assert np.all(possible_states == ground_truth)
-    sapling = Sapling(Point2d(0, 0), Point2d(0, 0), SAPLING_HARVESTED, modeling.world_model.scheduler)
+    sapling = Sapling(modeling, 0, Point2d(0, 0), SAPLING_HARVESTED, modeling.world_model.scheduler)
     possible_states = sapling.object_ids
     ground_truth = objects_info[objects_info["name"] == "Sapling"]["image_id"].values
     assert np.all(possible_states == ground_truth)
-    marsh_bush = MarshBush(Point2d(0, 0), Point2d(0, 0), MARSH_BUSH_HARVESTED, modeling.world_model.scheduler)
+    marsh_bush = MarshBush(modeling, 0, Point2d(0, 0), MARSH_BUSH_HARVESTED, modeling.world_model.scheduler)
     possible_states = marsh_bush.object_ids
     ground_truth = objects_info[objects_info["name"] == "MarshBush"]["image_id"].values
     assert np.all(possible_states == ground_truth)
-    evergreen = Evergreen(Point2d(0, 0), Point2d(0, 0), EVERGREEN_SMALL, modeling.world_model.scheduler, lumpy=False)
+    evergreen = Evergreen(modeling, 0, Point2d(0, 0), EVERGREEN_SMALL, modeling.world_model.scheduler, lumpy=False)
     possible_states = evergreen.object_ids
     ground_truth = objects_info[objects_info["name"] == "Evergreen"]["image_id"].values
     assert np.all(possible_states == ground_truth)
-    nest = SpiderNest(Point2d(0, 0), Point2d(0, 0), NEST_SMALL, modeling.world_model.scheduler)
+    nest = SpiderNest(modeling, 0, Point2d(0, 0), NEST_SMALL, modeling.world_model.scheduler)
     possible_states = nest.object_ids
     ground_truth = objects_info[objects_info["name"] == "SpiderNest"]["image_id"].values
     assert np.all(possible_states == ground_truth)

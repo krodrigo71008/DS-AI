@@ -4,8 +4,10 @@ DISTANCE_FOR_SAME_OBJECT = 2.5
 DISTANCE_FOR_SAME_MOB = 15
 # if an object is not detected for this many cycles, it will be removed 
 CYCLES_FOR_OBJECT_REMOVAL = 5
+# a mob needs to be detected for this many cycles to be added to the world model
+CYCLES_TO_ADMIT_MOB = 3
 # if a mob is not detected for this many cycles, it will be removed 
-CYCLES_FOR_MOB_REMOVAL = 5
+CYCLES_FOR_MOB_REMOVAL = 3
 # an object needs to be detected for this many cycles to be added to the world model
 CYCLES_TO_ADMIT_OBJECT = 3
 # speed in game coordinates per second
@@ -14,6 +16,10 @@ CYCLES_TO_ADMIT_OBJECT = 3
 PLAYER_BASE_SPEED = 6
 # distance from screen center to discard possible player positions
 DISTANCE_FOR_VALID_PLAYER_POSITION = 300
+# distance to search objects to match in SLAM (in pixels)
+DISTANCE_FOR_OBJECT_SEARCH = 3
+# we want to keep control process dt under this
+BASE_CONTROL_DT = 0.1
 
 # camera calibration
 # intrinsic parameters
@@ -23,6 +29,7 @@ FOV = 35 # degrees
 CAMERA_DISTANCE = 30
 CAMERA_PITCH = 42.857142 # (30 - 15)/ (50 - 15) * 60 + (50 - 30)/ (50 - 15) * 30, degrees
 CAMERA_HEADING = 45
+FOLLOW_HEIGHT = 1.5
 
 CHUNK_SIZE = 64
 TILE_SIZE = 4

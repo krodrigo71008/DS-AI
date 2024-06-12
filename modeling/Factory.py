@@ -18,7 +18,9 @@ from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
 from utility.Point2d import Point2d
 if TYPE_CHECKING:
+    from modeling.Modeling import Modeling
     from modeling.Scheduler import Scheduler
+    from modeling.SlamIndexManager import SlamIndexManager
 
 
 class Factory:
@@ -43,15 +45,20 @@ class Factory:
         self.structure_ids = aux
 
     # receives image id and returns an object
-    def create_object(self, image_id : int, pos : Point2d, latest_screen_position : Point2d, scheduler : Scheduler=None) -> ObjectModel:
+    def create_object(self, image_id : int, modeling : Modeling, slam_state_index : int, latest_screen_position : Point2d, 
+                      slam_index_manager : SlamIndexManager, scheduler : Scheduler = None) -> ObjectModel:
         """Create object described by image_id
 
         :param image_id: image_id from Perception
         :type image_id: int
-        :param pos: position in the world
-        :type pos: Point2d
+        :param modeling: modeling object
+        :type modeling: Modeling
+        :param slam_state_index: and
+        :type slam_state_index: int
         :param latest_screen_position: latest screen position of the object
         :type latest_screen_position: Point2d
+        :param slam_index_manager: slam_index_manager that handles which object is pointing to which slam index
+        :type slam_index_manager: SlamIndexManager
         :param scheduler: update scheduler to pass to some objects, defaults to None
         :type scheduler: Scheduler
         :return: requested object
@@ -60,31 +67,31 @@ class Factory:
         obj_id = objects_info.get_item_info(info="obj_id", image_id=image_id)
         name = objects_info.get_item_info(info="name", image_id=image_id)
         if obj_id in self.pickable_object_ids:
-            return PickableObjectModel(pos, latest_screen_position, obj_id, name)
+            return PickableObjectModel(modeling, slam_state_index, latest_screen_position, obj_id, image_id, name, slam_index_manager)
         if obj_id in self.structure_ids:
-            return StructureModel(pos, latest_screen_position, obj_id, name)
+            return StructureModel(modeling, slam_state_index, latest_screen_position, obj_id, image_id, name, slam_index_manager)
         if obj_id == 1:
-            return TallbirdNest(pos, latest_screen_position)
+            return TallbirdNest(modeling, slam_state_index, latest_screen_position, image_id, slam_index_manager)
         if obj_id == 4:
-            return Grass(pos, latest_screen_position, image_id, scheduler)
+            return Grass(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager)
         if obj_id == 5:
-            return Sapling(pos, latest_screen_position, image_id, scheduler)
+            return Sapling(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager)
         if obj_id == 11:
-            return Ashes(pos, latest_screen_position, scheduler)
+            return Ashes(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager)
         if obj_id == 12:
-            return Evergreen(pos, latest_screen_position, image_id, scheduler, lumpy=False)
+            return Evergreen(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager, lumpy=False)
         if obj_id == 13:
-            return SpiderNest(pos, latest_screen_position, image_id, scheduler)
+            return SpiderNest(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager)
         if obj_id == 14:
-            return BerryBush(pos, latest_screen_position, image_id, scheduler)
+            return BerryBush(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager)
         if obj_id == 23:
-            return Campfire(pos, latest_screen_position, image_id, scheduler)
+            return Campfire(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager)
         if obj_id == 48:
-            return Evergreen(pos, latest_screen_position, image_id, scheduler, lumpy=True)
+            return Evergreen(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager, lumpy=True)
         if obj_id == 55:
-            return MarshBush(pos, latest_screen_position, image_id, scheduler)
+            return MarshBush(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager)
         if obj_id == 61:
-            return Reeds(pos, latest_screen_position, image_id, scheduler)
+            return Reeds(modeling, slam_state_index, latest_screen_position, image_id, scheduler, slam_index_manager)
 
     @staticmethod
     def create_mob(id_ : int, pos : Point2d, latest_screen_position : Point2d) -> MobModel:

@@ -31,7 +31,7 @@ class Clock:
     def dt(self) -> float:
         """Gives time that passed between current time in this clock and the previous update
 
-        :return: passed time before last update
+        :return: passed time before last update in seconds
         :rtype: float
         """
         return self._last_dt
@@ -113,11 +113,11 @@ class Clock:
 
 
 class ClockMock(Clock):
-    def __init__(self, times_to_return : np.array):
+    def __init__(self, times_to_return : np.ndarray):
         """A Clock implementation that returns preset times instead of the real times
 
         :param times_to_return: [0] is start time, [1] is _last_time, [2] onwards is times_to_return
-        :type times_to_return: np.array
+        :type times_to_return: np.ndarray
         :return: ClockMock instance
         :rtype: ClockMock
         """

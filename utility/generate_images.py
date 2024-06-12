@@ -209,7 +209,7 @@ def generate_image(important_obj_list: list[tuple[int, int, str]], important_ind
     :return: important_index and not_important_index for next iteration
     :rtype: tuple[int, int]
     """
-    MAX_NOt_IMPORTANT_SCREEN_COVERAGE = 0.4
+    MAX_NOT_IMPORTANT_SCREEN_COVERAGE = 0.4
     bg_imgs_path = "perception/processed_bg_images"
     all_bg_images = os.listdir(bg_imgs_path)
     with Image.open(f"{bg_imgs_path}/{choose_random_in_array(all_bg_images)}") as image:
@@ -226,7 +226,7 @@ def generate_image(important_obj_list: list[tuple[int, int, str]], important_ind
             if not_important_index == 0:
                 shuffle(not_important_obj_list)
             not_important_coverage += dims[0]*dims[1]/(SCREEN_SIZE["width"]*SCREEN_SIZE["height"])
-            if not_important_coverage >= MAX_NOt_IMPORTANT_SCREEN_COVERAGE:
+            if not_important_coverage >= MAX_NOT_IMPORTANT_SCREEN_COVERAGE:
                 break
         max_important_object_count = randint(*important_objects_range)
         important_object_count = 0

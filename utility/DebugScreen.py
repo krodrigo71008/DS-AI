@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import tkinter as tk
 from tkinter import ttk
 from multiprocessing import Queue
@@ -7,9 +9,10 @@ from PIL import Image, ImageTk
 
 from perception.constants import SCREEN_SIZE
 from modeling.constants import CHUNK_SIZE, TILE_SIZE
-from modeling.TerrainTile import TerrainTile
 from utility.utility import get_multiples_in_range, get_color_representation_dict
-from utility.Point2d import Point2d
+if TYPE_CHECKING:
+    from modeling.TileManager import TileManager
+    from utility.Point2d import Point2d
 
 class DebugScreen:
     # reminder that the two below this are in pixels
@@ -58,6 +61,7 @@ class DebugScreen:
         self.world_map.pack()
         self.world_map_div.grid(row=2, column=1, rowspan=3)
         self.player_position = None
+        self.player_std = None
         self.world_objects = []
         self.objective : Point2d = None
         self.fov_corners : list[float] = []
@@ -106,7 +110,7 @@ class DebugScreen:
         # only use the most updated info
         if info is not None and info[0] == "control_info":
             _, q1, q2, q3 = info
-            world_model_objects, fov_corners, player_position, terrain_tiles = q1
+            world_model_objects, fov_corners, player_info, tile_manager = q1
             primary_action, secondary_action = q2
             current_action, key_action, mouse_action = q3
             self.primary_action_label["text"] = "Primary action: " + str(primary_action)
@@ -122,14 +126,18 @@ class DebugScreen:
             else:
                 self.current_action_label["text"] = "Current action: " + str(current_action)
             self.world_map.delete('all')
-            for name, pos_list in world_model_objects:
+            for name, info_list in world_model_objects:
                 if name == "Grass":
-                    for pos in pos_list:
-                        self.world_objects.append(("Grass", pos))
+                    for info in info_list:
+                        pos, std = info
+                        self.world_objects.append(("Grass", pos, std))
                 if name == "Sapling":
-                    for pos in pos_list:
-                        self.world_objects.append(("Sapling", pos))
+                    for info in info_list:
+                        pos, std = info
+                        self.world_objects.append(("Sapling", pos, std))
+            player_position, player_std = player_info
             self.player_position = player_position
+            self.player_std = player_std
             # this can be None if we don't know player_position
             if fov_corners[0] is not None:
                 self.fov_corners = (fov_corners[0].x1, fov_corners[0].x2, 
@@ -139,14 +147,16 @@ class DebugScreen:
         if self.player_position is not None:
             x1_range = (self.player_position.x1 - self.CLOSE_OBJECTS_X1/2, self.player_position.x1 + self.CLOSE_OBJECTS_X1/2)
             x2_range = (self.player_position.x2 - self.CLOSE_OBJECTS_X2/2, self.player_position.x2 + self.CLOSE_OBJECTS_X2/2)
-            self.draw_tiles(terrain_tiles, TILE_SIZE, x1_range, x2_range)
-            for name, position in self.world_objects:
+            self.draw_tiles(tile_manager, TILE_SIZE, x1_range, x2_range)
+            for name, position, std in self.world_objects:
                 if position.x1 > x1_range[0] and position.x1 < x1_range[1] and position.x2 > x2_range[0] and position.x2 < x2_range[1]:
                     if name == "Grass":
                         self.draw_shape(position.x1, position.x2, "triangle", "global", x1_range, x2_range)
                     elif name == "Sapling":
                         self.draw_shape(position.x1, position.x2, "square", "global", x1_range, x2_range)
+                    self.draw_std(position.x1, position.x2, std, "global", x1_range, x2_range)
             self.draw_shape(self.player_position.x1, self.player_position.x2, "circle", "global", x1_range, x2_range)
+            self.draw_std(self.player_position.x1, self.player_position.x2, self.player_std, "global", x1_range, x2_range)
             if self.objective is not None:
                 self.draw_shape(self.objective.x1, self.objective.x2, "x", "global", x1_range, x2_range)
             if len(self.fov_corners) > 0:
@@ -187,7 +197,7 @@ class DebugScreen:
         
         map_.create_polygon(x1, y1, x2, y2, x3, y3, x4, y4, fill='', outline="black")
     
-    def draw_tiles(self, terrain_tiles: dict[tuple[int, int], TerrainTile], tile_size : int, x1_range : tuple[int, int], x2_range : tuple[int, int]):
+    def draw_tiles(self, tile_manager: TileManager, tile_size : int, x1_range : tuple[int, int], x2_range : tuple[int, int]):
         x1_lines = get_multiples_in_range(tile_size, x1_range)
         x2_lines = get_multiples_in_range(tile_size, x2_range)
         map_ = self.world_map
@@ -195,9 +205,9 @@ class DebugScreen:
         for x1 in x1_lines:
             for x2 in x2_lines:
                 if x1 + tile_size < x1_range[1] and x2 + tile_size < x2_range[1]:
-                    if (int(x1//tile_size), int(x2//tile_size)) not in terrain_tiles:
+                    tile_type = tile_manager.get_tile((int(x1//tile_size), int(x2//tile_size)))
+                    if tile_type is None:
                         continue
-                    tile_type = terrain_tiles[int(x1//tile_size), int(x2//tile_size)].type
                     lx, ly = self.convert_world_coords_to_world_graph(x1, x2, x1_range, x2_range)
                     rx, ry = self.convert_world_coords_to_world_graph(x1+tile_size, x2+tile_size, x1_range, x2_range)
                     color = color_dict[tile_type][1]
@@ -253,6 +263,31 @@ class DebugScreen:
         elif shape == "x":
             map_.create_line(x-6, y-6, x+6, y+6, fill="red")
             map_.create_line(x+6, y-6, x-6, y+6, fill="red")
+
+    def draw_std(self, x1 : float, x2 : float, std : tuple[float, float], canvas_name : str, 
+                 x1_range : tuple[float, float], x2_range : tuple[float, float]):
+        """Draw shape on the specified canvas
+
+        :param x1: x1 position
+        :type x1: float
+        :param x2: x2 position
+        :type x2: float
+        :param std: standard deviation
+        :type std: tuple[float, float]
+        :param canvas_name: "global" for now
+        :type canvas_name: str
+        :param x1_range: x1 range of objects that should be drawn
+        :type x1_range: tuple[float, float]
+        :param x2_range: x2 range of objects that should be drawn
+        :type x2_range: tuple[float, float]
+        """
+        if canvas_name == "global":
+            map_ = self.world_map
+            x, y = self.convert_world_coords_to_world_graph(x1, x2, x1_range, x2_range)
+        else:
+            raise ValueError("Wrong usage!")
+        
+        map_.create_oval(x-2*std[0], y-2*std[1], x+2*std[0], y+2*std[1], outline="red")
 
     def close(self):
         self.window.destroy()

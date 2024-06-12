@@ -401,11 +401,11 @@ class Inventory:
             self.slots[equip_slot.position].change_item(obj.id, count)
         
 
-    def get_inventory_slots(self) -> dict:
+    def get_inventory_slots(self) -> dict[int | str, InventorySlot]:
         """Get inventory slots
 
         :return: inventory slots and items equipped on head, body and hand slots
-        :rtype: dict
+        :rtype: dict[int | str, InventorySlot]
         """
         return self.slots
 

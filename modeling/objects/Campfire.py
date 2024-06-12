@@ -3,13 +3,16 @@ from typing import TYPE_CHECKING
 
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 if TYPE_CHECKING:
+    from modeling.Modeling import Modeling
     from modeling.Scheduler import Scheduler
+    from modeling.SlamIndexManager import SlamIndexManager
     from utility.Point2d import Point2d
 
 
 class Campfire(ObjectWithMultipleForms):
-    def __init__(self, position : Point2d, latest_screen_position : Point2d, id_ : int, scheduler : Scheduler):
-        super().__init__(False, position, latest_screen_position, [45], id_, scheduler)
+    def __init__(self, modeling : Modeling, slam_state_index : int, latest_screen_position : Point2d, image_id : int, scheduler : Scheduler,
+                 slam_index_manager : SlamIndexManager):
+        super().__init__(modeling, slam_state_index, False, latest_screen_position, [45], image_id, scheduler, slam_index_manager)
         # I'll add the other states later
 
     def update(self, change : str):

@@ -4,19 +4,22 @@ from utility.Point2d import Point2d
 
 class MobModel:
     def __init__(self, position : Point2d, id_ : int, name : str, latest_screen_position: Point2d):
-        self.position = position
+        self._position = position
         self.id = id_
         self.name = name
         self.latest_screen_position = latest_screen_position
         self._cycles_to_be_deleted = CYCLES_FOR_MOB_REMOVAL
 
-    def set_position(self, x : float, z : float):
-        self.position = Point2d(x, z)
+    def set_position(self, x : float, z : float) -> None:
+        self._position = Point2d(x, z)
 
-    def update(self, change):
+    def position(self) -> Point2d:
+        return self._position
+
+    def update(self, change) -> None:
         pass
 
-    def handle_mob_detected(self, image_id):
+    def handle_mob_detected(self, image_id) -> None:
         pass
 
     def name_str(self) -> str:

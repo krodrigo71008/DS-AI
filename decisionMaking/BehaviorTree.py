@@ -1,4 +1,10 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 from enum import Enum
+
+if TYPE_CHECKING:
+    from modeling.Modeling import Modeling
+    from decisionMaking.ActionRequester import ActionRequester
 
 
 class ExecutionStatus(Enum):
@@ -14,7 +20,7 @@ class BehaviorTree(object):
     """
     Represents a behavior tree.
     """
-    def __init__(self, root=None):
+    def __init__(self, root : TreeNode=None):
         """
         Creates a behavior tree.
 
@@ -23,7 +29,7 @@ class BehaviorTree(object):
         """
         self.root = root
 
-    def update(self, modeling, action_requester):
+    def update(self, modeling : Modeling, action_requester : ActionRequester):
         """
         Updates the behavior tree.
 
@@ -38,7 +44,7 @@ class TreeNode(object):
     """
     Represents a node of a behavior tree.
     """
-    def __init__(self, node_name):
+    def __init__(self, node_name : str):
         """
         Creates a node of a behavior tree.
 
@@ -48,14 +54,14 @@ class TreeNode(object):
         self.node_name = node_name
         self.parent = None
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         """
         This method is executed when this node is entered.
 
         """
         raise NotImplementedError("This method is abstract and must be implemented in derived classes")
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         """
         Executes the behavior tree node logic.
 
@@ -73,10 +79,10 @@ class NegateNode(TreeNode):
         super().__init__(f"Not {node.node_name}")
         self.negated_node = node
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         pass
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         # Execute the child
         status = self.negated_node.execute(modeling, action_requester)
         if status == ExecutionStatus.FAILURE:
@@ -94,14 +100,14 @@ class LoopNode(TreeNode):
     """
     Represents a loop node of a behavior tree that executes its node while it returns success.
     """
-    def __init__(self, node: TreeNode):
+    def __init__(self, node):
         super().__init__(f"Loop {node.node_name}")
         self.looped_node = node
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         pass
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         # Execute the child
         status = self.looped_node.execute(modeling, action_requester)
         while status == ExecutionStatus.SUCCESS:
@@ -116,14 +122,14 @@ class LeafNode(TreeNode):
     def __init__(self, node_name):
         super().__init__(node_name)
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         """
         This method is executed when this node is entered.
 
         """
         raise NotImplementedError("This method is abstract and must be implemented in derived classes")
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         """
         Executes the behavior tree node logic.
 
@@ -151,14 +157,14 @@ class CompositeNode(TreeNode):
         child.parent = self
         self.children.append(child)
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         """
         This method is executed when this node is entered.
 
         """
         raise NotImplementedError("This method is abstract and must be implemented in derived classes")
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         """
         Executes the behavior tree node logic.
 
@@ -177,11 +183,11 @@ class SequenceNode(CompositeNode):
         # We need to keep track of the last running child when resuming the tree execution
         self.running_child = None
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         # When this node is entered, no child should be running
         self.running_child = None
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         if self.running_child is None:
             # If a child was not running, then the node puts its first child to run
             self.running_child = self.children[0]
@@ -218,11 +224,11 @@ class SelectorNode(CompositeNode):
         # We need to keep track of the last running child when resuming the tree execution
         self.running_child = None
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         # When this node is entered, no child should be running
         self.running_child = None
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         if self.running_child is None:
             # If a child was not running, then the node puts its first child to run
             self.running_child = self.children[0]
@@ -274,10 +280,10 @@ class CheckEnoughGrassTwigs(LeafNode):
     def __init__(self):
         super().__init__("CheckEnoughGrassTwigs")
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         pass
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         cut_grass_count = modeling.player_model.inventory.get_inventory_count(["CutGrass"])[0]
         twigs_count = modeling.player_model.inventory.get_inventory_count(["Twigs"])[0]
         if cut_grass_count < 4 or twigs_count < 4:
@@ -291,12 +297,12 @@ class GatherGrassTwigs(LeafNode):
         super().__init__("GatherGrassTwigs")
         self.start_time = None
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         self.start_time = modeling.clock.time()
         # set the behavior
         action_requester.set_action(("gather", ["CutGrass", "Twigs"]))
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         cut_grass_count = modeling.player_model.inventory.get_inventory_count(["CutGrass"])[0]
         twigs_count = modeling.player_model.inventory.get_inventory_count(["Twigs"])[0]
         if cut_grass_count < 4 or twigs_count < 4:
@@ -311,10 +317,10 @@ class CheckTorch(LeafNode):
     def __init__(self):
         super().__init__("CheckTorch")
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         pass
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         torch_count = modeling.player_model.inventory.get_inventory_count(["Torch"])[0]
         if torch_count < 1:
             return ExecutionStatus.FAILURE
@@ -327,12 +333,12 @@ class CraftTorch(LeafNode):
         super().__init__("CraftTorch")
         self.start_time = None
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         self.start_time = modeling.clock.time()
         # set the behavior
         action_requester.set_action(("craft", ["Torch"]))
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         torch_count = modeling.player_model.inventory.get_inventory_count(["Torch"])[0]
         if torch_count < 1:
             return ExecutionStatus.RUNNING
@@ -346,10 +352,10 @@ class CheckTorchEquipped(LeafNode):
     def __init__(self):
         super().__init__("CheckTorchEquipped")
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         pass
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         hand_slot = modeling.player_model.inventory.get_inventory_slots()["Hand"]
         if hand_slot.object is not None and hand_slot.object.name == "Torch":
             return ExecutionStatus.SUCCESS
@@ -361,10 +367,10 @@ class IsDayTime(LeafNode):
     def __init__(self):
         super().__init__("IsDayTime")
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         pass
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         if modeling.clock.day_section() != "Night":
             return ExecutionStatus.SUCCESS
         else:
@@ -376,12 +382,12 @@ class UnequipTorch(LeafNode):
         super().__init__("UnequipTorch")
         self.start_time = None
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         self.start_time = modeling.clock.time()
         # set the behavior
         action_requester.set_action(("unequip", "Hand"))
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         if modeling.player_model.inventory.get_inventory_slots()["Hand"].object is not None:
             return ExecutionStatus.RUNNING
         elif modeling.clock.time() - self.start_time >= 60:
@@ -395,12 +401,12 @@ class GatherFood(LeafNode):
         super().__init__("GatherFood")
         self.start_time = None
 
-    def enter(self, modeling, action_requester):
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
         self.start_time = modeling.clock.time()
         # set the behavior
         action_requester.set_action(("gather", ["food"]))
 
-    def execute(self, modeling, action_requester):
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
         # This node can't return SUCCESS since it would terminate the behavior tree
         if modeling.clock.time() - self.start_time >= 60:
             return ExecutionStatus.FAILURE

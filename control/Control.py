@@ -16,7 +16,7 @@ from utility.utility import clamp2pi
 
 
 class Control:
-    def __init__(self, debug=False, clock=Clock(), measure_time : bool = False):
+    def __init__(self, debug=False, clock=Clock()):
         self.key_action = None
         self.mouse_action = None
         self.clock : Clock = clock
@@ -64,10 +64,6 @@ class Control:
         if self.debug:
             self.records = []
 
-        self.measure_time = measure_time
-        if self.measure_time:
-            self.time_records_list = []
-
     def control(self, decision_making: DecisionMaking, modeling: Modeling):
         self.clock.update()
         # secondary_action is (action, payload)
@@ -109,7 +105,7 @@ class Control:
                 elif secondary_action[0] == "run":
                     # this is a multiple step process
                     # one step is walking for a bit
-                    self.run(secondary_action[1])
+                    self.run(secondary_action[1], modeling)
                 elif secondary_action[0] == "explore":
                     # this is a multiple step process
                     # one step is walking for a bit
@@ -146,9 +142,6 @@ class Control:
         :return: True if the rest of control should run, False if it should be interrupted
         :rtype: bool
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-
         if self.current_action == "eat":
             if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
                 self.action_in_progress = False
@@ -187,7 +180,7 @@ class Control:
                 self.action_on_cooldown = True
                 # in this case, estimated_time_for_objective is the estimated time to get to the object, after which the player will be still
                 if self.clock.time() - self.start_time >= self.estimated_time_for_objective:
-                    modeling.player_model.set_direction(None)
+                    modeling.set_direction(None)
                 if self.clock.time() - self.start_time >= PICK_UP_DURATION:
                     self.action_in_progress = False
         elif self.current_action == "equip":
@@ -273,30 +266,19 @@ class Control:
                 return_value = True
             elif self.update_at_end[0] == "reset_player_direction":
                 # reset player model direction
-                modeling.player_model.set_direction(None)
+                modeling.set_direction(None)
                 return_value = True
                 self.just_finished_action = True
             self.update_at_end = None
-
-            if self.measure_time:
-                t2 = time.time_ns()
-                self.time_records_list.append(("continue_action_update_path", t2-t1))
 
             return return_value
         if self.debug:
             self.records.append(("continue_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
                                  self.current_action, self.clock.time_in_seconds, self.update_at_end))
 
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("continue_action_no_update_path", t2-t1))
-
         return False
 
     def eat(self, food_name: str, modeling: Modeling):
-        if self.measure_time:
-            t1 = time.time_ns()
-
         # calculate where I should click
         inv = modeling.player_model.inventory
         slots_1 = [slot_num for slot_num in inv.get_inventory_slots()]
@@ -310,16 +292,9 @@ class Control:
                 self.key_action = None
                 self.update_at_end = ("eat", food_name)
                 break
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("eat", t2-t1))
 
 
     def equip(self, equip_name: str, modeling: Modeling):
-        if self.measure_time:
-            t1 = time.time_ns()
-
         # calculate where I should click
         inv = modeling.player_model.inventory
         slot_index = inv.find_first_slot(equip_name)
@@ -328,15 +303,8 @@ class Control:
         self.mouse_action = ("right_click", INV_SLOT_1_POS+INV_SLOT_DELTA*slot_index)
         self.key_action = None
         self.update_at_end = ("equip", equip_name)
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("equip", t2-t1))
         
     def unequip(self, equip_slot: str):
-        if self.measure_time:
-            t1 = time.time_ns()
-        
         slot_name_to_number = {
             "Hand": 0,
             "Body": 1,
@@ -347,15 +315,8 @@ class Control:
         self.mouse_action = ("right_click", INV_SLOT_HAND_POS+INV_SLOT_DELTA*slot_name_to_number[equip_slot])
         self.key_action = None
         self.update_at_end = ("unequip", equip_slot)
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("unequip", t2-t1))
 
     def craft(self, things_to_craft: list[str]):
-        if self.measure_time:
-            t1 = time.time_ns()
-
         if not self.crafting_open:
             self.key_action = (["caps_lock"], "press_and_release")
             self.crafting_open = True
@@ -385,83 +346,49 @@ class Control:
                         self.update_at_end = ("craft", item)
                         self.crafting_open = False
         self.mouse_action = None
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("craft", t2-t1))
 
     def go_towards(self, objective: Point2d, modeling: Modeling):
-        if self.measure_time:
-            t1 = time.time_ns()
-
         self.objective = objective
-        player_position = modeling.player_model.position
+        player_position = modeling.player_position()
         # PICK_UP_DISTANCE means that we should click it with mouse
         if objective.distance(player_position) < PICK_UP_DISTANCE:
             self.key_action = None
             self.mouse_action = None
-            
-            if self.measure_time:
-                t2 = time.time_ns()
-                self.time_records_list.append(("go_towards_close_enough", t2-t1))
-
             return
         # direction_to_move is in radians
         direction_to_move = (objective - player_position).angle()
-        modeling.player_model.set_direction(round(direction_to_move/(pi/4))*pi/4)
+        modeling.set_direction(round(direction_to_move/(pi/4))*pi/4)
         keys = self.global_direction_to_key_commands(direction_to_move)
         self.key_action = (keys, "press")
         self.mouse_action = None
         self.update_at_end = ("reset_player_direction",)
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("go_towards", t2-t1))
 
     def go_precisely_towards(self, objective: Point2d, modeling: Modeling):
-        if self.measure_time:
-            t1 = time.time_ns()
-
         self.objective = objective
-        player_position = modeling.player_model.position
+        player_position = modeling.player_position()
         if objective.distance(player_position) < CLOSE_ENOUGH_DISTANCE:
             self.key_action = None
             self.mouse_action = None
-            
-            if self.measure_time:
-                t2 = time.time_ns()
-                self.time_records_list.append(("go_precisely_towards_close_enough", t2-t1))
-
             return
         # direction_to_move is in radians
         direction_to_move = (objective - player_position).angle()
-        modeling.player_model.set_direction(round(direction_to_move/(pi/4))*pi/4)
+        modeling.set_direction(round(direction_to_move/(pi/4))*pi/4)
         keys = self.global_direction_to_key_commands(direction_to_move)
         self.key_action = (keys, "press")
         self.mouse_action = None
         self.update_at_end = ("reset_player_direction",)
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("go_precisely_towards", t2-t1))
 
-    def run(self, direction_to_run : float):
-        if self.measure_time:
-            t1 = time.time_ns()
-
+    def run(self, direction_to_run : float, modeling : Modeling):
+        modeling.set_direction(direction_to_run)
         keys = self.global_direction_to_key_commands(direction_to_run)
         self.key_action = (keys, "press")
         self.mouse_action = None
         self.update_at_end = ("reset_player_direction",)
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("run", t2-t1))
 
     @staticmethod
     def global_direction_to_key_commands(global_direction : float) -> list[str]:
         # correcting to account for camera heading
-        direction_to_move_from_camera = clamp2pi(global_direction - CAMERA_HEADING*math.pi/180)
+        direction_to_move_from_camera = clamp2pi(global_direction - CAMERA_HEADING*pi/180)
         # discretized_direction between -4 and 4, 0 aligned with camera direction and increasing counterclockwise
         discretized_direction = round(direction_to_move_from_camera/(pi/4))
         if discretized_direction == -4:
@@ -498,23 +425,13 @@ class Control:
 
 
     def explore(self, modeling : Modeling):
-        if self.measure_time:
-            t1 = time.time_ns()
-
         # reminder to somehow check that I'm not stuck somewhere
         chunk = modeling.world_model.get_closest_unexplored_chunk()
         # objective is the central point of the chunk
         objective = Point2d(chunk[0]*CHUNK_SIZE + CHUNK_SIZE/2, chunk[1]*CHUNK_SIZE + CHUNK_SIZE/2)
         self.go_towards(objective, modeling)
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("explore", t2-t1))
 
     def pick_up(self, obj : ObjectModel, modeling : Modeling):
-        if self.measure_time:
-            t1 = time.time_ns()
-
         if self.pick_up_state is None:
             self.key_action = None
             self.mouse_action = None
@@ -530,15 +447,84 @@ class Control:
             bbox = obj.latest_screen_position
             self.key_action = None
             self.mouse_action = ("click", Point2d.center_from_box(bbox))
-            player_pos = modeling.player_model.position
-            distance_to_object : Point2d = obj.position - player_pos
-            modeling.player_model.set_direction(distance_to_object.angle())
+            player_pos = modeling.player_position()
+            distance_to_object : Point2d = obj.position() - player_pos
+            modeling.set_direction(distance_to_object.angle())
             self.update_at_end = ("pick_up", obj)
             # this is the estimated time that we'll take to get to obj
             self.estimated_time_for_objective = distance_to_object.distance(Point2d(0, 0))/PLAYER_BASE_SPEED
             # send notice that we're no longer hovering over obj
             modeling.world_model.set_hovering_over(None)
-            
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records_list.append(("pick_up", t2-t1))
+
+class ControlTimer(Control):
+    def __init__(self, debug=False, clock=Clock()):
+        super().__init__(debug, clock)
+        self.time_records_list = []
+
+    def continue_action(self, modeling: Modeling) -> bool:
+        t1 = time.time_ns()
+        return_value = super().continue_action(modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("continue_action", t2-t1))
+        return return_value
+
+    def eat(self, food_name: str, modeling: Modeling):
+        t1 = time.time_ns()
+        super().eat(food_name, modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("eat", t2-t1))
+    
+    def equip(self, equip_name: str, modeling: Modeling):
+        t1 = time.time_ns()
+        super().equip(equip_name, modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("equip", t2-t1))
+    
+    def unequip(self, equip_slot: str):
+        t1 = time.time_ns()
+        super().unequip(equip_slot)
+        t2  = time.time_ns()
+        self.time_records_list.append(("unequip", t2-t1))
+    
+    def craft(self, things_to_craft: list[str]):
+        t1 = time.time_ns()
+        super().craft(things_to_craft)
+        t2  = time.time_ns()
+        self.time_records_list.append(("craft", t2-t1))
+    
+    def go_towards(self, objective: Point2d, modeling: Modeling):
+        t1 = time.time_ns()
+        super().go_towards(objective, modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("go_towards", t2-t1))
+    
+    def go_precisely_towards(self, objective: Point2d, modeling: Modeling):
+        t1 = time.time_ns()
+        super().go_precisely_towards(objective, modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("go_precisely_towards", t2-t1))
+    
+    def run(self, direction_to_run: float, modeling: Modeling):
+        t1 = time.time_ns()
+        super().run(direction_to_run, modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("run", t2-t1))
+    
+    def explore(self, modeling: Modeling):
+        t1 = time.time_ns()
+        super().explore(modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("explore", t2-t1))
+    
+    def pick_up(self, obj: ObjectModel, modeling: Modeling):
+        t1 = time.time_ns()
+        super().pick_up(obj, modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("pick_up", t2-t1))
+    
+    def control(self, decision_making: DecisionMaking, modeling: Modeling):
+        t1 = time.time_ns()
+        return_value = super().control(decision_making, modeling)
+        t2  = time.time_ns()
+        self.time_records_list.append(("control", t2-t1))
+        return return_value

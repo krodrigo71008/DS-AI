@@ -296,6 +296,12 @@ class ObjectsInfo:
             name = kwargs["name"]
         if "obj_id" in kwargs:
             obj_id = kwargs["obj_id"]
+        if info == "image_id":
+            return self._get_attr("image_id", image_id, name, obj_id)
+        if info == "name":
+            return self._get_attr("name", image_id, name, obj_id)
+        if info == "obj_id":
+            return self._get_attr("obj_id", image_id, name, obj_id)
         if info == "equip_slot":
             name = self._get_attr("name", image_id, name, obj_id)
             if name in self._name_to_equippable_slot:
@@ -333,12 +339,6 @@ class ObjectsInfo:
             if name in self._food_values:
                 return self._food_values[name][0:3]
             return None
-        if info == "image_id":
-            return self._get_attr("image_id", image_id, name, obj_id)
-        if info == "name":
-            return self._get_attr("name", image_id, name, obj_id)
-        if info == "obj_id":
-            return self._get_attr("obj_id", image_id, name, obj_id)
         if info == "object_type":
             if image_id is not None:
                 return self._item_table[self._item_table["image_id"] == image_id].object_type.iloc[0]

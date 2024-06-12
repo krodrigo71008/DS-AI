@@ -7,15 +7,11 @@ from control.Control import Control
 
 
 class Action:
-    def __init__(self, debug=False, measure_time=False):
+    def __init__(self, debug=False):
         self.current_keys = set()
         self.debug = debug
         if self.debug:
             self.records = []
-        
-        self.measure_time = measure_time
-        if self.measure_time:
-            self.time_records = []
 
     def act(self, control: Control) -> None:
         """Use mouse and keyboard to perform the action decided by the Control layer
@@ -23,9 +19,6 @@ class Action:
         :param control: Control layer
         :type control: Control
         """
-        if self.measure_time:
-            t1 = time.time_ns()
-
         # key_action is array of strings
         key_action = control.key_action
         mouse_action = control.mouse_action
@@ -63,10 +56,6 @@ class Action:
                     mouse.right_click()
                 elif mouse_action[0] == "move":
                     mouse.move(mouse_action[1].x1, mouse_action[1].x2)
-
-        if self.measure_time:
-            t2 = time.time_ns()
-            self.time_records.append(t2-t1)
         
 
     def act_mock(self, control: Control) -> list[str]:
@@ -88,3 +77,14 @@ class Action:
                 if not control.action_on_cooldown:
                     self.current_keys = self.current_keys.difference(key_action[0])
         return keys_to_release
+
+class ActionTimer(Action):
+    def __init__(self, debug=False):
+        super().__init__(debug)
+        self.time_records = []
+
+    def act(self, control: Control) -> None:
+        t1 = time.time_ns()
+        super().act(control)
+        t2 = time.time_ns()
+        self.time_records.append(t2-t1)
