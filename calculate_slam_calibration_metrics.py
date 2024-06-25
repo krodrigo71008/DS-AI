@@ -8,7 +8,7 @@ import pandas as pd
 from utility.Point2d import Point2d
 
 if __name__ == "__main__":
-    u_noise_list = [[1000, 1000]]
+    u_noise_list = [[4, 4]]
     debug = True
 
     df_dict = {

@@ -117,6 +117,10 @@ class WorldModel:
         :param obj: object obj
         :type obj: ObjectModel
         """
+        count = 0
+        for obj_chunk_list in self.objects_by_chunks.values():
+            count += len(obj_chunk_list)
+        print(f"before objects_by_chunks deletion: {count}")
         chunk_index = self.point_to_chunk_index(obj.position())
         # if obj is in the chunk we expect it to be
         if chunk_index in self.objects_by_chunks.keys() and obj in self.objects_by_chunks[chunk_index]:
@@ -124,7 +128,14 @@ class WorldModel:
         else:
             self.remove_object_from_chunk_lists(obj)
         
+        count = 0
+        for obj_chunk_list in self.objects_by_chunks.values():
+            count += len(obj_chunk_list)
+        print(f"after objects_by_chunks deletion: {count}")
+        
+        print(f"before object_lists deletion: {len(self.object_lists[obj.name_str()])}")
         self.object_lists[obj.name_str()].remove(obj)
+        print(f"after object_lists deletion: {len(self.object_lists[obj.name_str()])}")
         
 
     def warp_image_to_ground(self, image: np.ndarray, heading : float, pitch : float, 
@@ -572,12 +583,14 @@ class WorldModel:
                 else:
                     # if the object wasn't detected, we remove it
                     self.modeling.remove_from_slam_state(obj.slam_state_index())
+                    print(f"before recent objects deletion: {len(self.recent_objects)}")
                     del self.recent_objects[obj_index]
-                    self.slam_index_manager.remove_object(obj)
+                    print(f"after recent objects deletion: {len(self.recent_objects)}")
                     # update index to object mapping
                     index_ = (obj.slam_state_index() - 2) // 2
                     assert self.modeling.lm_id_to_object[index_] == obj
                     del self.modeling.lm_id_to_object[index_]
+                    self.slam_index_manager.remove_object(obj)
             # handling the case in which obj is a world model object (object removal if it wasn't detected for
             # many cycles in a row)
             else:
@@ -596,12 +609,11 @@ class WorldModel:
                             if obj.get_cycles_to_be_deleted() == 0:
                                 self.remove_object(obj)
                                 self.modeling.remove_from_slam_state(obj.slam_state_index())
-                                self.slam_index_manager.remove_object(obj)
-                                
                                 # update index to object mapping
                                 index_ = (obj.slam_state_index() - 2) // 2
                                 assert self.modeling.lm_id_to_object[index_] == obj
                                 del self.modeling.lm_id_to_object[index_]
+                                self.slam_index_manager.remove_object(obj)
                         del obj
 
         for pair in self.mobs_detected_this_cycle:

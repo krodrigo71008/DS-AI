@@ -35,7 +35,7 @@ class Modeling:
         # slam covariance
         self.PEst = np.zeros((self.slam.STATE_SIZE, self.slam.STATE_SIZE), dtype=np.float32)
 
-        self.lm_id_to_object : list[ObjectModel] = {}
+        self.lm_id_to_object : list[ObjectModel] = []
 
         # player direction
         self._direction = None

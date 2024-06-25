@@ -93,7 +93,7 @@ for seed, num_landmarks, trajectory_name, u_noise, h_noise in product(seed_list,
                 
         latest_n_LM = n_LM
         
-    print(f"\n{total1:.3f} {total2:.3f}")
+    # print(f"\n{total1:.3f} {total2:.3f}")
 
     if len(min_dists) == 0:
         lm_mse = -1

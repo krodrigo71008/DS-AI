@@ -127,7 +127,7 @@ class Slam:
         mahal_id_to_lm_id = {}
         for i in range(initial_n_LM):
             # only get objects with same name
-            if i in lm_id_to_object and image_objs[iz].id != lm_id_to_object[i].image_id:
+            if i < len(lm_id_to_object) and image_objs[iz].id != lm_id_to_object[i].image_id:
                 continue
             i1 = self.LM_idx(i)
             i2 = i1+self.LM_SIZE
@@ -185,7 +185,7 @@ class Slam:
             converted_closest_idx = mahal_id_to_lm_id[closest_idx]
             # if closest_idx not in lm_id_to_object, it means it's matching a new object 
             # and should be ignored
-            if converted_closest_idx not in lm_id_to_object.keys():
+            if converted_closest_idx >= len(lm_id_to_object):
                 self.new_object_match_count += 1
                 return
             matching_detection = (converted_closest_idx, iz)
