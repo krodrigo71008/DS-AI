@@ -5,14 +5,14 @@ from modeling.constants import CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FO
 from utility.Point2d import Point2d
 
 # positions are Point2d
-def local_to_almost_global_position(local_position : Point2d, 
+def image_to_local_position(image_position : Point2d, 
         heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, distance : float = CAMERA_DISTANCE, 
         fov : float = FOV, follow_height : float = FOLLOW_HEIGHT) -> Point2d:
-    """Converts the local position (2d image position) to an almost global position (could be 3d, 
+    """Converts the image position (2d image position) to a local global position (could be 3d, 
     but everything is on the ground)
 
-    :param local_position: object position relative to the top left corner
-    :type local_position: Point2d
+    :param image_position: object position relative to the top left corner
+    :type image_position: Point2d
     :param heading: camera heading
     :type heading: float
     :param pitch: camera pitch
@@ -29,8 +29,8 @@ def local_to_almost_global_position(local_position : Point2d,
     # f = H / (2*tan(AFOV/2)), f focal distance, H height, AFOV angular FOV
     f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
     # in opencv, y points down and x points to the right, so in our coordinate system u is right and v is down
-    u = local_position.x1 - SCREEN_SIZE["width"]/2
-    v = local_position.x2 - SCREEN_SIZE["height"]/2
+    u = image_position.x1 - SCREEN_SIZE["width"]/2
+    v = image_position.x2 - SCREEN_SIZE["height"]/2
     heading = heading*math.pi/180
     pitch = pitch*math.pi/180
     sin_heading = math.sin(heading)

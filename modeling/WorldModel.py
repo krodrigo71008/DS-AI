@@ -23,7 +23,7 @@ from modeling.ObjectsInfo import objects_info
 from modeling.Scheduler import Scheduler
 from modeling.SlamIndexManager import SlamIndexManager
 from modeling.TileManager import TileManager
-from modeling.utility import local_to_almost_global_position
+from modeling.utility import image_to_local_position
 from utility.Clock import Clock
 from utility.Point2d import Point2d
 from utility.utility import is_inside_convex_polygon, get_color_representation_dict
@@ -398,7 +398,7 @@ class WorldModel:
             if objects_info.get_item_info(image_id=obj.id, info="object_type") == "OBJECT":
                 pos = self.object_detected(obj)
                 # converting from global to local position for SLAM
-                pos = pos - past_player_position
+                pos = pos - self.origin_coordinates
                 # for pos, x1 is x and x2 is z
                 bottom_box_point = Point2d.bottom_from_box(obj.box)
                 detections.extend([bottom_box_point.x1, bottom_box_point.x2])
@@ -433,7 +433,7 @@ class WorldModel:
             self.origin_coordinates = past_player_position
         else:
             # pos in (x, z) in world coords
-            pos = local_to_almost_global_position(self.latest_detected_player_position, heading, pitch, distance, fov, follow_height)
+            pos = image_to_local_position(self.latest_detected_player_position, heading, pitch, distance, fov, follow_height)
             self.origin_coordinates = past_player_position - pos
         # corners of the trapezoid that we are seeing
         self.c1 = self.local_to_global_position(Point2d(0, 0), heading, pitch, distance, fov, follow_height)
@@ -456,7 +456,7 @@ class WorldModel:
             # if the chunk exists in our modeling (there are objects in our WorldModel that are in that chunk), 
             # we get all the objects that should be currently rendered
             if chunk in self.objects_by_chunks:
-                cur_obj_list.extend([[obj, False] for obj in self.objects_by_chunks[chunk] 
+                cur_obj_list.extend([[obj, False, 'chunk'] for obj in self.objects_by_chunks[chunk] 
                                                 if is_inside_convex_polygon([self.c1, self.c2, self.c3, self.c4], obj.position())])
         self.objects_detected_this_cycle = cur_obj_list
         cur_mob_list = []
@@ -464,7 +464,7 @@ class WorldModel:
             cur_mob_list.extend([[mob, False] for mob in mob_list])
         self.mobs_detected_this_cycle = cur_mob_list
         # add recent objects to the list that we're going to observe whether we detect them this cycle
-        self.objects_detected_this_cycle.extend([[pair[0], False] for pair in self.recent_objects])
+        self.objects_detected_this_cycle.extend([[pair[0], False, 'recent'] for pair in self.recent_objects])
         # add recent mobs to the list that we're going to observe whether we detect them this cycle
         self.mobs_detected_this_cycle.extend([[pair[0], False] for pair in self.recent_mobs])
         self.additions_to_recent_objects = []
@@ -490,7 +490,7 @@ class WorldModel:
         :return: position in the world's coordinate system
         :rtype: Point2d
         """
-        pos = local_to_almost_global_position(local_position, heading, pitch, distance, fov, follow_height)
+        pos = image_to_local_position(local_position, heading, pitch, distance, fov, follow_height)
 
         return self.origin_coordinates + pos
 
@@ -563,58 +563,62 @@ class WorldModel:
         """Marks the end of a modeling cycle, this should be called in the end of update_model() on Modeling.
         It also removes objects that were not detected and should be.
         """
-        self.cycles_since_player_detected += 1
-        for pair in self.objects_detected_this_cycle:
-            obj = pair[0]
-            detected = pair[1]
-            # handling the case in which obj is a recent object
-            if obj in [pair[0] for pair in self.recent_objects]:
-                obj_index = [pair[0] for pair in self.recent_objects].index(obj)
-                if detected:
-                    new_count = self.recent_objects[obj_index][1]+1
-                    # if the required number of cycles to admit an object is met, add it to both object_lists and objects_by_chunks
-                    if new_count == CYCLES_TO_ADMIT_OBJECT:
-                        self.add_object(obj)
-                        # also remove it from recent objects
-                        del self.recent_objects[obj_index]
+        try:
+            self.cycles_since_player_detected += 1
+            for pair in self.objects_detected_this_cycle:
+                obj = pair[0]
+                detected = pair[1]
+                # handling the case in which obj is a recent object
+                if obj in [pair[0] for pair in self.recent_objects]:
+                    obj_index = [pair[0] for pair in self.recent_objects].index(obj)
+                    if detected:
+                        new_count = self.recent_objects[obj_index][1]+1
+                        # if the required number of cycles to admit an object is met, add it to both object_lists and objects_by_chunks
+                        if new_count == CYCLES_TO_ADMIT_OBJECT:
+                            self.add_object(obj)
+                            # also remove it from recent objects
+                            del self.recent_objects[obj_index]
+                        else:
+                            # update the cycle count for the object
+                            self.recent_objects[obj_index][1] = new_count
                     else:
-                        # update the cycle count for the object
-                        self.recent_objects[obj_index][1] = new_count
+                        # if the object wasn't detected, we remove it
+                        self.modeling.remove_from_slam_state(obj.slam_state_index())
+                        print(f"before recent objects deletion: {len(self.recent_objects)}")
+                        del self.recent_objects[obj_index]
+                        print(f"after recent objects deletion: {len(self.recent_objects)}")
+                        # update index to object mapping
+                        index_ = (obj.slam_state_index() - 2) // 2
+                        assert self.modeling.lm_id_to_object[index_] == obj
+                        del self.modeling.lm_id_to_object[index_]
+                        self.slam_index_manager.remove_object(obj)
+                # handling the case in which obj is a world model object (object removal if it wasn't detected for
+                # many cycles in a row)
                 else:
-                    # if the object wasn't detected, we remove it
-                    self.modeling.remove_from_slam_state(obj.slam_state_index())
-                    print(f"before recent objects deletion: {len(self.recent_objects)}")
-                    del self.recent_objects[obj_index]
-                    print(f"after recent objects deletion: {len(self.recent_objects)}")
-                    # update index to object mapping
-                    index_ = (obj.slam_state_index() - 2) // 2
-                    assert self.modeling.lm_id_to_object[index_] == obj
-                    del self.modeling.lm_id_to_object[index_]
-                    self.slam_index_manager.remove_object(obj)
-            # handling the case in which obj is a world model object (object removal if it wasn't detected for
-            # many cycles in a row)
-            else:
-                if detected:
-                    obj.reset_cycles_to_be_deleted()
-                else:
-                    # we make it so that objects on the screen border aren't deleted if they aren't seen for a while
-                    # since they often are offscreen or blocked by HUD
-                    if is_inside_convex_polygon([self.c1_deletion_border, 
-                                                    self.c2_deletion_border,
-                                                    self.c3_deletion_border, 
-                                                    self.c4_deletion_border], obj.position()):
-                        # we shouldn't count down an object for deletion if we're hovering over it
-                        if obj != self.hovering_object:
-                            obj.countdown_cycles_to_be_deleted()
-                            if obj.get_cycles_to_be_deleted() == 0:
-                                self.remove_object(obj)
-                                self.modeling.remove_from_slam_state(obj.slam_state_index())
-                                # update index to object mapping
-                                index_ = (obj.slam_state_index() - 2) // 2
-                                assert self.modeling.lm_id_to_object[index_] == obj
-                                del self.modeling.lm_id_to_object[index_]
-                                self.slam_index_manager.remove_object(obj)
-                        del obj
+                    if detected:
+                        obj.reset_cycles_to_be_deleted()
+                    else:
+                        # we make it so that objects on the screen border aren't deleted if they aren't seen for a while
+                        # since they often are offscreen or blocked by HUD
+                        if is_inside_convex_polygon([self.c1_deletion_border, 
+                                                        self.c2_deletion_border,
+                                                        self.c3_deletion_border, 
+                                                        self.c4_deletion_border], obj.position()):
+                            # we shouldn't count down an object for deletion if we're hovering over it
+                            if obj != self.hovering_object:
+                                obj.countdown_cycles_to_be_deleted()
+                                if obj.get_cycles_to_be_deleted() == 0:
+                                    self.remove_object(obj)
+                                    self.modeling.remove_from_slam_state(obj.slam_state_index())
+                                    # update index to object mapping
+                                    index_ = (obj.slam_state_index() - 2) // 2
+                                    assert self.modeling.lm_id_to_object[index_] == obj
+                                    del self.modeling.lm_id_to_object[index_]
+                                    self.slam_index_manager.remove_object(obj)
+                            del obj
+        except Exception as e:
+            print(e)
+            print(pair)
 
         for pair in self.mobs_detected_this_cycle:
             mob = pair[0]

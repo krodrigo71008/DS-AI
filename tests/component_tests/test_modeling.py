@@ -13,7 +13,7 @@ from modeling.WorldModel import WorldModel
 from modeling.constants import CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV, FOLLOW_HEIGHT
 from modeling.constants import DISTANCE_FOR_SAME_OBJECT, CHUNK_SIZE, CYCLES_TO_ADMIT_OBJECT, DISTANCE_FOR_VALID_PLAYER_POSITION
 from modeling.Scheduler import SchedulerMock
-from modeling.utility import local_to_almost_global_position
+from modeling.utility import image_to_local_position
 from perception.constants import SCREEN_SIZE
 from perception.YoloIdConverter import yolo_id_converter
 from perception.ImageObject import ImageObject
@@ -441,10 +441,10 @@ def aux_test_inverseH(u, v):
     modeling = Modeling()
     world = modeling.world_model
     eps = 1e-4
-    xz1 = local_to_almost_global_position(Point2d(u-eps, v))
-    xz2 = local_to_almost_global_position(Point2d(u+eps, v))
-    xz3 = local_to_almost_global_position(Point2d(u, v-eps))
-    xz4 = local_to_almost_global_position(Point2d(u, v+eps))
+    xz1 = image_to_local_position(Point2d(u-eps, v))
+    xz2 = image_to_local_position(Point2d(u+eps, v))
+    xz3 = image_to_local_position(Point2d(u, v-eps))
+    xz4 = image_to_local_position(Point2d(u, v+eps))
     x_u = (xz2.x1 - xz1.x1)/(2*eps)
     x_v = (xz4.x1 - xz3.x1)/(2*eps)
     z_u = (xz2.x2 - xz1.x2)/(2*eps)
@@ -519,7 +519,7 @@ def test_xy_model():
     for _ in range(20):
         u = int(random.random()*1920)
         v = int(random.random()*1080)
-        xz_point = local_to_almost_global_position(Point2d(u, v))
+        xz_point = image_to_local_position(Point2d(u, v))
         x = xz_point.x1
         z = xz_point.x2
 
@@ -569,7 +569,7 @@ def aux_test_covariance_with_jacob_inverseH(u, v):
         u_r = np.random.normal()*std_u + u
         v_r = np.random.normal()*std_v + v
         # convert them to xz
-        xz = local_to_almost_global_position(Point2d(u_r, v_r))
+        xz = image_to_local_position(Point2d(u_r, v_r))
         x_r = xz.x1
         z_r = xz.x2
         temp_list[0].append(x_r)

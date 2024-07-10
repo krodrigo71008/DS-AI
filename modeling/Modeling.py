@@ -44,7 +44,9 @@ class Modeling:
         self.player_model = PlayerModel(self.clock)
         self.world_model = WorldModel(self, self.clock, debug)
 
-        self.pests = []
+        if self.debug:
+            # self.pests = []
+            self.dt_record = []
 
     def handle_detected_objects_queue(self, detected_objects_queue: Queue) -> list[ImageObject]:
         if detected_objects_queue.empty():
@@ -83,12 +85,17 @@ class Modeling:
     def update_player_model(self) -> None:
         self.player_model.update()
 
-    def slam_predict(self) -> None:
+    def slam_predict(self, dt = None) -> None:
         if self._direction is None:
             u = np.zeros((self.slam.STATE_SIZE, 1))
         else:
             u = np.array([[self.DEFAULT_SPEED*math.cos(self._direction), self.DEFAULT_SPEED*math.sin(self._direction)]]).T
-        self.xEst, self.PEst = self.slam.predict(self.xEst, self.PEst, u, self.clock.dt())
+        if dt is None:
+            dt = self.clock.dt()
+        
+        if self.debug:
+            self.dt_record.append(dt)
+        self.xEst, self.PEst = self.slam.predict(self.xEst, self.PEst, u, dt)
 
     def use_received_yolo_info(self, obj_list : list[ImageObject]) -> None:
         if self.received_yolo_info:
@@ -99,7 +106,10 @@ class Modeling:
             if self._direction is None:
                 past_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0])
             else:
+                # latest_yolo_timestamp is when yolo sent the information, the clock timestamp is when Modeling starts its loop
+                # this means dt should be negative, which is why we add it instead of subtracting it
                 dt = self.latest_yolo_timestamp - self.clock.raw_timestamp()
+                assert dt < 0
                 past_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0]) + Point2d(math.cos(self._direction), math.sin(self._direction))*dt*self.DEFAULT_SPEED
             
             observations, conv_observations, image_objs = self.world_model.handle_yolo_info(obj_list, past_player_position)
@@ -108,8 +118,8 @@ class Modeling:
                                                                  image_objs, self.world_model, self.lm_id_to_object)
             for image_object, slam_state_index, lm_id in new_objects:
                 obj = self.world_model.create_object(image_object, slam_state_index)
-                assert lm_id == len(self.lm_id_to_object)
                 self.lm_id_to_object.append(obj)
+                assert self.lm_id_to_object[lm_id] == obj
                 # print(self.PEst[slam_state_index:slam_state_index+2, slam_state_index:slam_state_index+2])
             self.world_model.finish_cycle()
             # print(self.xEst)

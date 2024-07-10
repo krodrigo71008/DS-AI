@@ -217,10 +217,10 @@ class Application(tk.Tk):
 
 
 if __name__ == "__main__":
-    # 445,150,spiral_1,"[2, 2]","[40.0, 50.0]"
-    seed = 445
-    num_landmarks = 150
-    trajectory_name = "spiral_1"
+    # 727,20,square_2,"[2, 2]","[2.0, 3.0]"
+    seed = 727
+    num_landmarks = 20
+    trajectory_name = "square_2"
     trajectories = {
         "square_1" : [Point2d(50, 50), Point2d(50, -50), Point2d(-50, -50), Point2d(-50, 50), Point2d(50, 50), Point2d(0, 0)],
         "square_2" : [Point2d(0, 50), Point2d(50, 0), Point2d(0, -50), Point2d(-50, 0), Point2d(0, 50), Point2d(0, 0)],

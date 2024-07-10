@@ -5,7 +5,8 @@ import mouse
 
 from control.Control import Control
 
-
+# NOTE: I ran record_slam_states_for_calibration.py and noticed that the first 2 control loop iterations had weirdly big Action times,
+# so I reran it with act_mock instead of act and those big times disappeared, so it's probably some issue with the library
 class Action:
     def __init__(self, debug=False):
         self.current_keys = set()
@@ -31,7 +32,7 @@ class Action:
                         self.records.append(('release', '+'.join(keys_to_release)))
                 keyboard.press('+'.join(key_action[0]))
                 if self.debug:
-                    self.records.append(('´press', '+'.join(key_action[0])))
+                    self.records.append(('press', '+'.join(key_action[0])))
                 self.current_keys = set(key_action[0])
             elif key_action[1] == "press_and_release":
                 # this is probably wrong, but for now just release all keys when doing it
@@ -45,7 +46,10 @@ class Action:
                     self.current_keys = self.current_keys.difference(key_action[0])
         else:
             if len(self.current_keys) > 0:
-                keyboard.release('+'.join(self.current_keys))
+                keys_to_release = self.current_keys
+                keyboard.release('+'.join(keys_to_release))
+            else:
+                keys_to_release = []
         if mouse_action is not None:
             if not control.action_on_cooldown:
                 if mouse_action[0] == "click":
@@ -69,13 +73,18 @@ class Action:
         # key_action is array of strings
         key_action = control.key_action
         mouse_action = control.mouse_action
-        keys_to_release = list(self.current_keys.difference(key_action[0]))
         if key_action is not None:
+            keys_to_release = list(self.current_keys.difference(key_action[0]))
             if key_action[1] == "press":
                 self.current_keys = set(key_action[0])
             elif key_action[1] == "press_and_release":
                 if not control.action_on_cooldown:
                     self.current_keys = self.current_keys.difference(key_action[0])
+        else:
+            if len(self.current_keys) > 0:
+                keys_to_release = self.current_keys
+            else:
+                keys_to_release = []
         return keys_to_release
 
 class ActionTimer(Action):

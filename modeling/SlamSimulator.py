@@ -12,7 +12,7 @@ from modeling.Modeling import Modeling
 from modeling.WorldModel import WorldModelSlamMock
 from modeling.Slam import SlamTimer
 from modeling.constants import PLAYER_BASE_SPEED, CAMERA_HEADING
-from modeling.utility import local_to_almost_global_position
+from modeling.utility import image_to_local_position
 from decisionMaking.constants import CLOSE_ENOUGH_DISTANCE
 from control.Control import Control
 from utility.utility import is_inside_convex_polygon, clamp2pi
@@ -57,10 +57,10 @@ class SlamSimulator():
             self.landmarks.append((random.randint(0, 50), Point2d(self.generate_random_in_range(self.x_range), self.generate_random_in_range(self.y_range))))
         
         self.world_model = WorldModelSlamMock(Modeling(), Clock())
-        c1 = local_to_almost_global_position(Point2d(0, 0))
-        c2 = local_to_almost_global_position(Point2d(0, SCREEN_SIZE["height"]))
-        c3 = local_to_almost_global_position(Point2d(SCREEN_SIZE["width"], SCREEN_SIZE["height"]))
-        c4 = local_to_almost_global_position(Point2d(SCREEN_SIZE["width"], 0))
+        c1 = image_to_local_position(Point2d(0, 0))
+        c2 = image_to_local_position(Point2d(0, SCREEN_SIZE["height"]))
+        c3 = image_to_local_position(Point2d(SCREEN_SIZE["width"], SCREEN_SIZE["height"]))
+        c4 = image_to_local_position(Point2d(SCREEN_SIZE["width"], 0))
         self.vision_trapezoid = [c1, c2, c3, c4, c1]
         self.slam = SlamTimer()
         # slam state
@@ -100,7 +100,6 @@ class SlamSimulator():
             self.image = Image.new(mode="RGB", size=(SCREEN_SIZE["width"], SCREEN_SIZE["width"]), color="white")
             self.draw = ImageDraw.Draw(self.image)
 
-
         self.closed_control_loop = True
         if not closed_control_loop:
             self.closed_control_loop = False
@@ -117,14 +116,12 @@ class SlamSimulator():
                 self.turn_times.append(time_acc)
                 self.turn_angles.append(angle)
             
-
-
     @staticmethod
     def generate_random_in_range(range_ : tuple[float, float]) -> float:
         start, end = range_
         return random.random()*(end-start) + start
 
-    def _get_visible_landmarks(self, player_position : Point2d) -> list[Point2d]:
+    def _get_visible_landmarks(self, player_position : Point2d) -> list[tuple[int, Point2d]]:
         results = []
         for lm in self.landmarks:
             # check if landmark relative position is "on screen"
@@ -151,7 +148,7 @@ class SlamSimulator():
             if self.debug:
                 self.measurement_errors.append([measurement_error_u, measurement_error_v])
             noisy_point = Point2d(result[0] + measurement_error_u, result[1] + measurement_error_v)
-            xz_point = local_to_almost_global_position(noisy_point)
+            xz_point = image_to_local_position(noisy_point)
             if self.debug:
                 self.measurement_position_errors.append([player_position.x1 + xz_point.x1 - lm.x1, 
                                                         player_position.x2 + xz_point.x2 - lm.x2])

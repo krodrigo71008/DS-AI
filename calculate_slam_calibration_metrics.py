@@ -20,6 +20,8 @@ if __name__ == "__main__":
     for u_noise in u_noise_list:
         control_thread_times = np.load(f"slam_calibration/control_thread_times__{str(u_noise[0])}__{str(u_noise[1])}__{debug}.npy")
         modeling_clock_times = np.load(f"slam_calibration/modeling_clock_times__{str(u_noise[0])}__{str(u_noise[1])}__{debug}.npy")
+        slam_predict_times = np.load(f"slam_calibration/slam_predict_times__{str(u_noise[0])}__{str(u_noise[1])}__{debug}.npy")
+        debug_times = np.load(f"slam_calibration/all_split_times__{str(u_noise[0])}__{str(u_noise[1])}__{debug}.npy")
         print("man")
         # expected_trajectory = np.array([[p.x1, p.x2] for p in trajectories[trajectory_name]])
         player_positions_gt = np.load(f"slam_calibration/player_positions_gt__{str(u_noise[0])}__{str(u_noise[1])}__{debug}.npy")

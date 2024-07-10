@@ -11,6 +11,7 @@ from action.Action import Action
 from control.Control import Control
 from decisionMaking.DecisionMaking import DecisionMaking
 from modeling.Modeling import Modeling
+from modeling.constants import BASE_CONTROL_DT
 from perception.Perception import Perception
 from perception.SegmentationModel import SegmentationModel
 from utility.DebugScreen import DebugScreen
@@ -100,9 +101,14 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
     last_time = None
     times_ = []
     modeling_clock_times = []
+    times_for_performance = []
     while should_stop.value == 0 and time.time() - start < MAX_TIMEOUT_TIME:
+        time_start = time.time_ns()
+        t1 = time.time_ns()
         q1 = modeling.update_model(detected_objects_queue, segmentation_queue)
+        t2 = time.time_ns()
         q2 = decision_making.decide(modeling)
+        t3 = time.time_ns()
         if (walking_segment_start is not None) and (time.time() - walking_segment_start >= turn_times[direction_index]):
             direction_index += 1
             just_changed = True
@@ -115,7 +121,9 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
         decision_making.secondary_action = ("run", directions[direction_index])
         q2 = (decision_making.primary_action, decision_making.secondary_action)
         q3 = control.control(decision_making, modeling)
+        t4 = time.time_ns()
         action.act(control)
+        t5 = time.time_ns()
 
         if just_changed:
             direction = directions[direction_index-1]
@@ -144,6 +152,15 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
                 q.put(("control_info", q1, q2, q3))
             except ValueError:
                 print("control debug_queue closed")
+
+        t6 = time.time_ns()
+        times_for_performance.append([t2-t1, t3-t2, t4-t3, t5-t4, t6-t5])
+
+        time_end = time.time_ns()
+        dt_ = time_end - time_start
+        sleep_amount = BASE_CONTROL_DT - dt_/1e9
+        if sleep_amount > 0:
+            time.sleep(sleep_amount)
     
     detected_objects_queue.cancel_join_thread()
     segmentation_queue.cancel_join_thread()
@@ -151,6 +168,10 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
         q.cancel_join_thread()
 
     is_debug = q is not None
+    if is_debug:
+        slam_predict_times = modeling.dt_record
+        np.save(f"{output_folder}/slam_predict_times__{str(modeling.slam.Q[0, 0])}__{str(modeling.slam.Q[1, 1])}__{str(is_debug)}.npy", slam_predict_times)
+        np.save(f"{output_folder}/all_split_times__{str(modeling.slam.Q[0, 0])}__{str(modeling.slam.Q[1, 1])}__{str(is_debug)}.npy", times_for_performance)
 
     with open(f"{output_folder}/state_estimate__{str(modeling.slam.Q[0, 0])}__{str(modeling.slam.Q[1, 1])}__{str(is_debug)}.pkl", "wb") as file:
         pickle.dump(xEst_list, file)

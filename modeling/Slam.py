@@ -45,12 +45,30 @@ class Slam:
         self.correct_match_count = 0
 
     @staticmethod
-    def mahal_dist(p1 : np.ndarray, p2 : np.ndarray, cov : np.ndarray):
+    def mahal_dist(p1 : np.ndarray, p2 : np.ndarray, cov : np.ndarray) -> float:
+        """Calculates mahalanobis distance between p1 and p2 given covariance matrix cov
+
+        :param p1: p1
+        :type p1: np.ndarray
+        :param p2: p2
+        :type p2: np.ndarray
+        :param cov: covariance matrix
+        :type cov: np.ndarray
+        :return: mahalanobis distance
+        :rtype: float
+        """
         dist = p2 - p1
         res = dist.T @ np.linalg.inv(cov) @ dist
         return res[0, 0]
 
-    def LM_idx(self, id_):
+    def LM_idx(self, id_: int) -> int:
+        """Convert landmark id to state index
+
+        :param id_: landmark id
+        :type id_: int
+        :return: state index
+        :rtype: int
+        """
         return self.STATE_SIZE + id_*self.LM_SIZE
 
     def predict(self, xEst, PEst, u, dt):
@@ -104,6 +122,7 @@ class Slam:
     def compare_observations_to_state(self, xEst, PEst, z, conv_z, iz, S, 
                                       initial_n_LM, lm_id_to_object, image_objs, 
                                       new_obj_list, world_model, n_LM, lm_points):
+        """Calculate mahal dists, create new object and match object"""
         mahal_dists, mahal_id_to_lm_id = self.calculate_mahal_dists(z, iz, S, initial_n_LM, lm_id_to_object, 
                                                                     image_objs, xEst, conv_z, PEst, world_model)
         
