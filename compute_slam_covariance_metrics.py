@@ -30,7 +30,7 @@ if __name__ == "__main__":
     debug = False
     save_images = False
 
-    NUM_SIMS = 1000
+    NUM_SIMS = 10000
 
     for seed, num_landmarks, trajectory_name, u_noise, h_noise in product(seed_list, num_landmarks_list, trajectory_name_list, u_noise_list, h_noise_list):
         sims : list[SlamSimulator] = []
@@ -46,8 +46,10 @@ if __name__ == "__main__":
             sim.slam.R = np.diag(h_noise)**2
             sims.append(sim)
         
-        cos_sim_log = []
-        norm_dist_log = []
+        player_cos_sim_log = []
+        player_norm_dist_log = []
+        lm_cos_sim_log = []
+        lm_norm_dist_log = []
         while True:
             should_break = False
             player_positions = []
@@ -99,7 +101,7 @@ if __name__ == "__main__":
                     v1_norm = np.linalg.norm(v1)
                     v2_norm = np.linalg.norm(v2)
                     cos_sim = (v1*v2).sum()/v1_norm/v2_norm
-                    norm_dist = np.abs(v1_norm - v2_norm)
+                    norm_dist = np.abs(v1_norm - v2_norm)/v2_norm
                     if sim.slam._state_landmark_gt[i] in lm_cov_cos_sim_lists.keys():
                         lm_cov_cos_sim_lists[sim.slam._state_landmark_gt[i]].append(cos_sim)
                     else:
@@ -117,15 +119,21 @@ if __name__ == "__main__":
             avg_lm_cos_sim = np.mean(lm_cov_cos_sim_list)
             avg_lm_norm_dist = np.mean(lm_cov_norm_dist_list)
 
-            cos_sim_log.append(avg_lm_cos_sim)
-            norm_dist_log.append(avg_lm_norm_dist)
+            player_cos_sim_log.append(avg_player_cos_sim)
+            player_norm_dist_log.append(avg_player_norm_dist)
+            lm_cos_sim_log.append(avg_lm_cos_sim)
+            lm_norm_dist_log.append(avg_lm_norm_dist)
+            
+            print(f"pc: {avg_player_cos_sim:.2f}, pn: {avg_player_norm_dist:.2f}, lc: {avg_lm_cos_sim:.2f}, ln: {avg_lm_norm_dist:.2f}")
 
             print(f"{sim.time:.1f}/{sim.turn_times[-1]:.1f}")
 
             if should_break:
                 break
         
-        np.save(f"slam_simulator_results/slam_covariance_cosine_similarity__{seed}__{num_landmarks}__{trajectory_name}__{str(u_noise[0])}__{str(u_noise[1])}__{str(h_noise[0])}__{str(h_noise[1])}.npy", np.array(cos_sim_log))
-        np.save(f"slam_simulator_results/slam_covariance_norm_distance__{seed}__{num_landmarks}__{trajectory_name}__{str(u_noise[0])}__{str(u_noise[1])}__{str(h_noise[0])}__{str(h_noise[1])}.npy", np.array(norm_dist_log))
+        np.save(f"slam_simulator_results/slam_covariance_player_cosine_similarity__{seed}__{num_landmarks}__{trajectory_name}__{str(u_noise[0])}__{str(u_noise[1])}__{str(h_noise[0])}__{str(h_noise[1])}.npy", np.array(player_cos_sim_log))
+        np.save(f"slam_simulator_results/slam_covariance_player_norm_distance__{seed}__{num_landmarks}__{trajectory_name}__{str(u_noise[0])}__{str(u_noise[1])}__{str(h_noise[0])}__{str(h_noise[1])}.npy", np.array(player_norm_dist_log))
+        np.save(f"slam_simulator_results/slam_covariance_lm_cosine_similarity__{seed}__{num_landmarks}__{trajectory_name}__{str(u_noise[0])}__{str(u_noise[1])}__{str(h_noise[0])}__{str(h_noise[1])}.npy", np.array(lm_cos_sim_log))
+        np.save(f"slam_simulator_results/slam_covariance_lm_norm_distance__{seed}__{num_landmarks}__{trajectory_name}__{str(u_noise[0])}__{str(u_noise[1])}__{str(h_noise[0])}__{str(h_noise[1])}.npy", np.array(lm_norm_dist_log))
         
     print("done")

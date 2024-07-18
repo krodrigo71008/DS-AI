@@ -29,7 +29,7 @@ class Modeling:
         self.latest_segmentation_timestamp : float = None
         self.received_yolo_info : bool = False
         self.received_segmentation_info : bool = False
-        self.slam = Slam()
+        self.slam = Slam(debug)
         # slam state
         self.xEst = np.array([[TILE_SIZE//2, TILE_SIZE//2]], dtype=np.float32).T
         # slam covariance
@@ -47,6 +47,11 @@ class Modeling:
         if self.debug:
             # self.pests = []
             self.dt_record = []
+            self.latest_observations = None
+            self.latest_conv_observations = None
+            self.latest_image_objs = None
+            self.latest_new_objects = None
+            self.xEst_size_at_time_of_new_object_creation = None
 
     def handle_detected_objects_queue(self, detected_objects_queue: Queue) -> list[ImageObject]:
         if detected_objects_queue.empty():
@@ -113,6 +118,10 @@ class Modeling:
                 past_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0]) + Point2d(math.cos(self._direction), math.sin(self._direction))*dt*self.DEFAULT_SPEED
             
             observations, conv_observations, image_objs = self.world_model.handle_yolo_info(obj_list, past_player_position)
+            if self.debug:
+                self.latest_observations = observations
+                self.latest_conv_observations = conv_observations
+                self.latest_image_objs = image_objs
             self.xEst, self.PEst, new_objects = self.slam.update(self.xEst, self.PEst, 
                                                                  np.array([observations]).T, np.array([conv_observations]).T, 
                                                                  image_objs, self.world_model, self.lm_id_to_object)
@@ -121,6 +130,10 @@ class Modeling:
                 self.lm_id_to_object.append(obj)
                 assert self.lm_id_to_object[lm_id] == obj
                 # print(self.PEst[slam_state_index:slam_state_index+2, slam_state_index:slam_state_index+2])
+            
+            if self.debug:
+                self.latest_new_objects = new_objects
+                self.xEst_size_at_time_of_new_object_creation = self.xEst.shape[0]
             self.world_model.finish_cycle()
             # print(self.xEst)
             # print(self.PEst)

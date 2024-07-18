@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class Slam:
-    def __init__(self) -> None:
+    def __init__(self, debug=False) -> None:
         # EKF state covariance
         # estimated for 0.1 s
         # self.Q = np.array([[0.1, 0.01937269],
@@ -32,6 +32,10 @@ class Slam:
         self.MAHAL_THRESHOLD = 9.21  # Threshold of Mahalanobis distance for data association.
         self.STATE_SIZE = 2  # State size [x,y]
         self.LM_SIZE = 2  # LM state size [x,y]
+
+        self.debug = debug
+        if debug:
+            self.filtered_observations = None
 
         # this is updated when we match an object to a new landmark, that is, two detections are so close that they point
         # to the same object, this should never happen since we only calculate mahal dists for 
@@ -123,8 +127,8 @@ class Slam:
                                       initial_n_LM, lm_id_to_object, image_objs, 
                                       new_obj_list, world_model, n_LM, lm_points):
         """Calculate mahal dists, create new object and match object"""
-        mahal_dists, mahal_id_to_lm_id = self.calculate_mahal_dists(z, iz, S, initial_n_LM, lm_id_to_object, 
-                                                                    image_objs, xEst, conv_z, PEst, world_model)
+        mahal_dists, mahal_id_to_lm_id = self.calculate_mahal_dists(z, conv_z, iz, S, initial_n_LM, lm_id_to_object, 
+                                                                    image_objs, xEst, PEst, world_model)
         
         new_object, closest_idx, xEst, PEst, n_LM = self.create_new_object_if_needed(mahal_dists, z, conv_z, iz, S, 
                                                                                         xEst, PEst, new_obj_list, image_objs, 
@@ -136,7 +140,7 @@ class Slam:
         
         return matching_detection, xEst, PEst, n_LM
     
-    def calculate_mahal_dists(self, z, iz, S, initial_n_LM, lm_id_to_object, image_objs, xEst, conv_z, PEst, 
+    def calculate_mahal_dists(self, z, conv_z, iz, S, initial_n_LM, lm_id_to_object, image_objs, xEst, PEst, 
                               world_model : WorldModel):
         mahal_dists = []
         iz1 = self.LM_SIZE*iz
@@ -144,23 +148,48 @@ class Slam:
         conversion_jacob = world_model.jacob_inverseH(z[iz1, 0], z[iz1+1, 0])
         # since we're removing objects from the list, mahal index isn't the same as landmark id
         mahal_id_to_lm_id = {}
+        if self.debug:
+            self.filtered_observations = []
         for i in range(initial_n_LM):
             # only get objects with same name
             if i < len(lm_id_to_object) and image_objs[iz].id != lm_id_to_object[i].image_id:
+                if self.debug:
+                    self.filtered_observations.append(i)
                 continue
             i1 = self.LM_idx(i)
             i2 = i1+self.LM_SIZE
+            # player position + local object position compared to object position in state
             dist = (xEst[0:S]+conv_z[iz1:iz2]) - xEst[i1:i2]
             # only get objects within a certain radius
-            if (dist[0]**2 + dist[1]**2) > DISTANCE_FOR_OBJECT_SEARCH**2:
+            if (dist[0, 0]**2 + dist[1, 0]**2) > DISTANCE_FOR_OBJECT_SEARCH**2:
+                if self.debug:
+                    self.filtered_observations.append(i)
                 continue
-            # get covariance of landmark i + covariance of observation
+            # covariance of landmark i + player covariance + covariance of observation
             cov_i = PEst[i1:i2, i1:i2] + PEst[0:S,0:S] + conversion_jacob @ self.R @ conversion_jacob.T
             mahal_dist = self.mahal_dist(xEst[0:S]+conv_z[iz1:iz2], xEst[i1:i2], cov_i)
             # mahal_dist = dist.T @ np.linalg.inv(cov_i) @ dist
             mahal_id_to_lm_id[len(mahal_dists)] = i
             mahal_dists.append(mahal_dist)
         
+        if self.debug:
+            assert len(mahal_id_to_lm_id) == len(mahal_dists)
+            assert len(self.filtered_observations) + len(mahal_id_to_lm_id) == initial_n_LM
+            # prev_v = -1
+            # for k, v in mahal_id_to_lm_id.items():
+            #     for i in range(prev_v+1, v):
+            #         assert i in self.filtered_observations
+
+            #     # calculate cov again to confirm mahal_id_to_lm_id is correct
+            #     cov_i = PEst[S+2*v:S+2*v+2, S+2*v:S+2*v+2] + PEst[0:S,0:S] + conversion_jacob @ self.R @ conversion_jacob.T
+            #     mahal_dist = self.mahal_dist(xEst[0:S]+conv_z[iz1:iz2], xEst[S+2*v:S+2*v+2], cov_i)
+            #     assert mahal_dist == mahal_dists[k]
+
+            #     prev_v = v
+
+            # for i in range(prev_v+1, initial_n_LM):
+            #     assert i in self.filtered_observations
+
         return mahal_dists, mahal_id_to_lm_id
 
     def create_new_object_if_needed(self, mahal_dists, z, conv_z, iz, S, xEst, PEst, new_obj_list, image_objs, n_LM, world_model : WorldModel, lm_points):
@@ -325,10 +354,10 @@ class SlamTimer(Slam):
         self.time_records["compare_observations_to_state"].append([t2-t1])
         return return_value
     
-    def calculate_mahal_dists(self, z, iz, S, initial_n_LM, lm_id_to_object, image_objs, xEst, conv_z, PEst, 
+    def calculate_mahal_dists(self, z, conv_z, iz, S, initial_n_LM, lm_id_to_object, image_objs, xEst, PEst, 
                               world_model : WorldModel):
         t1 = time.time_ns()
-        return_value = super().calculate_mahal_dists(z, iz, S, initial_n_LM, lm_id_to_object, image_objs, xEst, conv_z, PEst, world_model)
+        return_value = super().calculate_mahal_dists(z, conv_z, iz, S, initial_n_LM, lm_id_to_object, image_objs, xEst, PEst, world_model)
         t2 = time.time_ns()
         self.time_records["calculate_mahal_dists"].append([t2-t1])
         return return_value

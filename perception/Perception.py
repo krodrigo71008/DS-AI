@@ -17,7 +17,7 @@ mon = {"top": SCREEN_POS["top"], "left": SCREEN_POS["left"],
 class Perception:
     def __init__(self, debug=False, queue=None):
         self.model = YOLO("perception/darknet/best.pt")
-        self.CONFIDENCE_THRESHOLD = .3
+        self.CONFIDENCE_THRESHOLD = .5
         self.NMS_THRESHOLD = .7
         self.sct = mss.mss()
         self.objects = []
