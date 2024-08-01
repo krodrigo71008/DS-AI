@@ -24,8 +24,8 @@ class Slam:
             [0, 4]])
         # Measurement covariance in pixels
         self.R = np.array([
-            [4.36410, 0.138089],
-            [0.138089, 9.891213]
+            [4.36410, 0],
+            [0, 9.891213]
         ])
 
         # chi square for 2 DF: 90% 4.605, 95% 5.991, 97.5% 7.378, 99% 9.21
@@ -166,7 +166,7 @@ class Slam:
                     self.filtered_observations.append(i)
                 continue
             # covariance of landmark i + player covariance + covariance of observation
-            cov_i = PEst[i1:i2, i1:i2] + PEst[0:S,0:S] + conversion_jacob @ self.R @ conversion_jacob.T
+            cov_i = PEst[i1:i2, i1:i2]
             mahal_dist = self.mahal_dist(xEst[0:S]+conv_z[iz1:iz2], xEst[i1:i2], cov_i)
             # mahal_dist = dist.T @ np.linalg.inv(cov_i) @ dist
             mahal_id_to_lm_id[len(mahal_dists)] = i

@@ -121,6 +121,8 @@ if __name__ == "__main__":
             modeling.latest_segmentation_info = segmentation_results
             modeling.latest_segmentation_timestamp = seg_timestamp
         
+
+        # timestamp to analyze problems: clock.current_time_index == 22
         modeling.update_model_using_info(detected_objects, segmentation_results)
 
         # compare expected observations with observations

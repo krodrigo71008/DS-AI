@@ -53,7 +53,8 @@ class WorldModel:
         self.objects_by_chunks : dict[tuple[int, int], list[ObjectModel]] = {}
         self.mob_lists : dict[str, list[MobModel]] = {}
         self.explored_chunks = set()
-        self.objects_detected_this_cycle : list[list[ObjectModel, bool]] = {}
+        # ObjectModel, whether it was detected this cycle, and if it's a 'recent' object or if it's from a 'chunk'
+        self.objects_detected_this_cycle : list[list[ObjectModel, bool, str]] = {}
         self.mobs_detected_this_cycle : list[list[MobModel, bool]] = {}
         self.latest_detected_player_position : Point2d = None
         self.cycles_since_player_detected : int = 0
