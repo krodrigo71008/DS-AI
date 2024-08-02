@@ -114,7 +114,10 @@ class DebugScreen:
             primary_action, secondary_action = q2
             current_action, key_action, mouse_action = q3
             self.primary_action_label["text"] = "Primary action: " + str(primary_action)
-            self.secondary_action_label["text"] = f"Secondary action: {str(secondary_action[0])}, {str(secondary_action[1])}"
+            if len(secondary_action) == 1:
+                self.secondary_action_label["text"] = f"Secondary action: {str(secondary_action[0])}"
+            else:
+                self.secondary_action_label["text"] = f"Secondary action: {str(secondary_action[0])}, {str(secondary_action[1])}"
             self.key_label["text"] = "Key command: " + str(key_action)
             if mouse_action is None:
                 self.mouse_label["text"] = "Mouse command: " + str(mouse_action)

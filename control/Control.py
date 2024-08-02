@@ -4,6 +4,7 @@ import time
 
 from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, HAND_INVENTORY_POSITION, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, CRAFT_KEYPRESS_DURATION
 from control.constants import PICK_UP_DURATION, PICK_UP_STOP_DURATION, PICK_UP_HOVER_DURATION, RUN_DURATION, FINISH_CRAFTING_DURATION, EXPLORE_DURATION
+from control.constants import STOP_DURATION
 from decisionMaking.DecisionMaking import DecisionMaking
 from decisionMaking.constants import PICK_UP_DISTANCE, CLOSE_ENOUGH_DISTANCE
 from modeling.Modeling import Modeling
@@ -120,6 +121,9 @@ class Control:
                 elif secondary_action[0] == "unequip":
                     # this is a one step process
                     self.unequip(secondary_action[1])
+                elif secondary_action[0] == "stop":
+                    # this is a one step process
+                    self.stop()
                 else:
                     raise ValueError("Invalid secondary action!")
                 self.current_action = secondary_action[0]
@@ -192,6 +196,9 @@ class Control:
         elif self.current_action == "close_inventory":
             self.action_on_cooldown = True
             if self.clock.time() - self.start_time >= CRAFT_KEYPRESS_DURATION:
+                self.action_in_progress = False
+        elif self.current_action == "stop":
+            if self.clock.time() - self.start_time >= STOP_DURATION:
                 self.action_in_progress = False
 
         # each action has different signals for stopping, this will probably be changed someday
@@ -455,6 +462,11 @@ class Control:
             self.estimated_time_for_objective = distance_to_object.distance(Point2d(0, 0))/PLAYER_BASE_SPEED
             # send notice that we're no longer hovering over obj
             modeling.world_model.set_hovering_over(None)
+
+    def stop(self):
+        self.key_action = None
+        self.mouse_action = None
+        self.update_at_end = None
 
 class ControlTimer(Control):
     def __init__(self, debug=False, clock=Clock()):

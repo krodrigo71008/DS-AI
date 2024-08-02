@@ -38,7 +38,7 @@ class TileManager:
             return None
         
         # [0] gets values, [1] gets counts
-        results = mode(self.tiles[conv_p11:conv_p21+1, conv_p12:conv_p22+1, :], axis=2)[0]
+        results = mode(self.tiles[conv_p11:conv_p21+1, conv_p12:conv_p22+1, :], axis=2, keepdims=False)[0]
         return results
 
     def get_tile(self, p : tuple[int, int]) -> np.ndarray:

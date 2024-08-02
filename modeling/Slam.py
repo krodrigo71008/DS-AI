@@ -24,8 +24,8 @@ class Slam:
             [0, 4]])
         # Measurement covariance in pixels
         self.R = np.array([
-            [4.36410, 0],
-            [0, 9.891213]
+            [43.6410, 0],
+            [0, 98.91213]
         ])
 
         # chi square for 2 DF: 90% 4.605, 95% 5.991, 97.5% 7.378, 99% 9.21
@@ -86,6 +86,9 @@ class Slam:
         :returns: predicted state vector, predicted covariance
         """
         S = self.STATE_SIZE
+        # if we're not moving, no need to update matrices
+        if u[0, 0] == 0.0 and u[1, 0] == 0.0:
+            return xEst, PEst
         xEst[0:S] = xEst[0:S] + dt*u
         PEst[0:S, 0:S] = PEst[0:S, 0:S] + self.Q*((dt/BASE_CONTROL_DT)**2) # Q is tuned for 0.1 s
         return xEst, PEst
@@ -204,8 +207,11 @@ class Slam:
             conversion_jacob = world_model.jacob_inverseH(z[iz1, 0], z[iz1+1, 0])
             initP = PEst[0:S, 0:S] + conversion_jacob @ self.R @ conversion_jacob.T
             new_xEst = np.vstack((xEst, xEst[0:S]+conv_z[iz1:iz2]))
+            # TEMPORARY HORRIBLE NASTY HACK
             new_PEst = np.vstack((np.hstack((PEst, np.zeros((len(xEst), self.LM_SIZE)))),
                             np.hstack((np.zeros((self.LM_SIZE, len(xEst))), initP))))
+            # new_PEst = np.vstack((np.hstack((PEst, np.tile((initP+PEst[0:S, 0:S])/2, (len(xEst)//self.LM_SIZE, 1)))),
+            #                 np.hstack((np.tile((initP+PEst[0:S, 0:S])/2, len(xEst)//self.LM_SIZE), initP))))
             xEst = new_xEst
             PEst = new_PEst
             closest_idx = n_LM

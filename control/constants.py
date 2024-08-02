@@ -12,6 +12,8 @@ PICK_UP_STOP_DURATION = 1
 PICK_UP_HOVER_DURATION = .75
 # run action duration (this is repeated)
 RUN_DURATION = 0.1
+# stop action duration (this is repeated)
+STOP_DURATION = 0.1
 # duration of 'explore for a bit' action (this is repeated)
 EXPLORE_DURATION = 1
 # duration of a single keypress duration when crafting

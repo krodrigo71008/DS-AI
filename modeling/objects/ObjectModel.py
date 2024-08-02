@@ -37,9 +37,14 @@ class ObjectModel:
     
     def std(self) -> tuple[float, float]:
         slam_state_index = self.slam_index_manager.get_index(self)
-        cov_x1 = self.modeling.PEst[slam_state_index, slam_state_index]
-        cov_x2 = self.modeling.PEst[slam_state_index+1, slam_state_index+1]
-        return math.sqrt(cov_x1), math.sqrt(cov_x2)
+        try:
+            cov_x1 = self.modeling.PEst[slam_state_index, slam_state_index]
+            cov_x2 = self.modeling.PEst[slam_state_index+1, slam_state_index+1]
+            return math.sqrt(cov_x1), math.sqrt(cov_x2)
+        except:
+            print(slam_state_index)
+            print(self.modeling.PEst[slam_state_index:slam_state_index+2,slam_state_index:slam_state_index+2])
+            raise Exception("aaaaaaaaaaa")
 
     def slam_state_index(self) -> int:
         return self.slam_index_manager.get_index(self)

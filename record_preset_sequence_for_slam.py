@@ -88,6 +88,9 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
     modeling_clock_times = []
     directions = []
     turn_times = []
+    START_DELAY = 0.3
+    directions.append(None)
+    turn_times.append(START_DELAY)
     for i in range(len(trajectory)):
         if i == 0:
             continue
@@ -116,7 +119,10 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
                 control.key_action = None
                 action.act(control)
                 break
-        decision_making.secondary_action = ("run", directions[direction_index])
+        if directions[direction_index] is None:
+            decision_making.secondary_action = ("stop",)
+        else:
+            decision_making.secondary_action = ("run", directions[direction_index])
         q2 = (decision_making.primary_action, decision_making.secondary_action)
         q3 = control.control(decision_making, modeling)
         action.act(control)
@@ -126,7 +132,10 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
             direction = directions[direction_index]
 
         if last_time is not None:
-            u = np.array([[modeling.DEFAULT_SPEED*math.cos(direction), modeling.DEFAULT_SPEED*math.sin(direction)]]).T
+            if direction is None:
+                u = np.zeros((2, 1))
+            else:
+                u = np.array([[modeling.DEFAULT_SPEED*math.cos(direction), modeling.DEFAULT_SPEED*math.sin(direction)]]).T
             t_ = time.time() - last_time
             player_position_gt += u*t_
             times_.append(t_)
