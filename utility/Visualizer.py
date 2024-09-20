@@ -8,6 +8,8 @@ from perception.constants import SCREEN_SIZE, SEGMENTATION_INPUT_SIZE
 from modeling.constants import CHUNK_SIZE, TILE_SIZE
 from utility.utility import draw_annotations, get_multiples_in_range, get_color_representation_dict
 if TYPE_CHECKING:
+    from decisionMaking.DecisionMaking import DecisionMaking
+    from control.Control import Control
     from modeling.Modeling import Modeling
     from modeling.objects.ObjectModel import ObjectModel
     from modeling.TileManager import TileManager
@@ -58,10 +60,7 @@ class Visualizer:
         self.warped_position = (SCREEN_SIZE["width"]//2-SEGMENTATION_INPUT_SIZE[0]-30, SCREEN_SIZE["height"]-SEGMENTATION_INPUT_SIZE[1]-30)
         self.time_ = 0
         self.time_position = (SCREEN_SIZE["width"]//2-50, 30)
-        self.player_position_position = (SCREEN_SIZE["width"]//2-150, 100)
-        self.player_direction_position = (SCREEN_SIZE["width"]//2-150, 200)
         self.tiles_position = (self.WORLD_CANVAS_WIDTH+50, 50)
-        self.error_position = (SCREEN_SIZE["width"]//20, SCREEN_SIZE["height"]//2+250)
         self.draw = ImageDraw.Draw(self.image)
         self.last_yolo_image = None
         self.last_segmentation_image = None
@@ -168,16 +167,17 @@ class Visualizer:
         player_std = modeling.player_std()
         new_recent_obj = [obj_pair[0] for obj_pair in recent_objects]
         tile_manager = modeling.world_model.tile_manager
+        player_momentum = modeling.player_momentum
         self.draw_world_model(world_objects, player_position, player_std,
                                 vision_corners, deletion_corners, origin_coordinates, 
-                                new_recent_obj, tile_manager)
+                                new_recent_obj, tile_manager, player_momentum)
 
     def draw_world_model(self, world_objects : list[tuple[str, Point2d, tuple[float, float]]], player_position : Point2d,
                             player_std : tuple[float, float],
                             vision_corners : tuple[Point2d, Point2d, Point2d, Point2d], 
                             deletion_corners : tuple[Point2d, Point2d, Point2d, Point2d], 
                             origin_coordinates : Point2d, recent_objects : list[ObjectModel], 
-                            tile_manager : TileManager) -> None:
+                            tile_manager : TileManager, player_momentum : Point2d) -> None:
         """Draw world model
 
         :param world_objects: list of relevant world objects
@@ -196,11 +196,27 @@ class Visualizer:
         :type recent_objects: list[ObjectModel]
         :param tile_manager: world model tile manager
         :type tile_manager: TileManager
+        :param player_momentum: player momentum
+        :type player_momentum: Point2d
         """
         if player_position is not None:
             x1_range = (player_position.x1 - self.CLOSE_OBJECTS_X1/2, player_position.x1 + self.CLOSE_OBJECTS_X1/2)
             x2_range = (player_position.x2 - self.CLOSE_OBJECTS_X2/2, player_position.x2 + self.CLOSE_OBJECTS_X2/2)
             self.draw_tiles(tile_manager, TILE_SIZE, x1_range, x2_range)
+            self.draw.text((self.WORLD_CANVAS_WIDTH//2, self.WORLD_CANVAS_HEIGHT+5), f"{x1_range[0]:.2f}, {x1_range[1]:.2f}", 
+                           fill="black", font=self.font, anchor="mt")
+            self.draw.text((self.WORLD_CANVAS_WIDTH+5, self.WORLD_CANVAS_HEIGHT//2), f"{x2_range[0]:.2f}, {x2_range[1]:.2f}", 
+                           fill="black", font=self.font, anchor="lm")
+            self.draw.text((self.WORLD_CANVAS_WIDTH+5, self.WORLD_CANVAS_HEIGHT+5), f"Player position: {player_position.x1:.2f}, {player_position.x2:.2f}", 
+                           fill="black", font=self.font, anchor="lt")
+            if player_momentum is not None:
+                player_momentum = player_momentum*15 # just to make it easier to see
+                x_p1, y_p1 = self.convert_world_coords_to_world_graph(player_position.x1, player_position.x2, x1_range, x2_range)
+                x_p2, y_p2 = self.convert_world_coords_to_world_graph(player_position.x1+player_momentum.x1, 
+                                                                      player_position.x2+player_momentum.x2, 
+                                                                      x1_range, x2_range)
+                self.draw.line(((x_p1, y_p1), (x_p2, y_p2)), fill="gray", width=1)
+                self.draw.ellipse(((x_p2-2, y_p2-2), (x_p2+2, y_p2+2)), fill="gray", width=1)
             # black for objects in world model
             for obj_id, position, std in world_objects:
                 if position.x1 > x1_range[0] and position.x1 < x1_range[1] and position.x2 > x2_range[0] and position.x2 < x2_range[1]:
@@ -277,6 +293,20 @@ class Visualizer:
                     if color is not None:
                         self.draw.rectangle((lx, ly, rx, ry), outline="gray", fill=color)
 
+    def write_decision_making_control(self, decision_making : DecisionMaking, control : Control):
+        self.draw.text(((self.yolo_border[0]+self.yolo_border[2])//2, (self.yolo_border[1]+self.yolo_border[3])//2 - 75),
+                       f"Primary action: {self.textify(decision_making.primary_action)}", 
+                       fill="black", font=self.font, anchor="mm")
+        self.draw.text(((self.yolo_border[0]+self.yolo_border[2])//2, (self.yolo_border[1]+self.yolo_border[3])//2 - 25),
+                       f"Secondary action: {self.textify(decision_making.secondary_action)}", 
+                       fill="black", font=self.font, anchor="mm")
+        self.draw.text(((self.yolo_border[0]+self.yolo_border[2])//2, (self.yolo_border[1]+self.yolo_border[3])//2 + 75),
+                       f"Current action: {self.textify(control.current_action)}", 
+                       fill="black", font=self.font, anchor="mm")
+        self.draw.text(((self.yolo_border[0]+self.yolo_border[2])//2, (self.yolo_border[1]+self.yolo_border[3])//2 + 25),
+                       f"Key action: {self.textify(control.key_action)}", 
+                       fill="black", font=self.font, anchor="mm")
+
     def export_results(self, output_path : str):
         self.image.save(output_path)
         self.image = Image.new(mode="RGB", size=(SCREEN_SIZE["width"], SCREEN_SIZE["height"]), color="white")
@@ -293,3 +323,15 @@ class Visualizer:
             std_x1, std_y1 = self.convert_world_coords_to_world_graph(x1 - std[0], x2 - std[1], x1_range, x2_range)
             std_x2, std_y2 = self.convert_world_coords_to_world_graph(x1 + std[0], x2 + std[1], x1_range, x2_range)
             self.draw.ellipse([(std_x1, std_y1), (std_x2, std_y2)], outline="gray")
+
+    def draw_objective_point(self, player_position : Point2d, control : Control):
+        if player_position is not None and control.objective is not None:
+            x1_range = (player_position.x1 - self.CLOSE_OBJECTS_X1/2, player_position.x1 + self.CLOSE_OBJECTS_X1/2)
+            x2_range = (player_position.x2 - self.CLOSE_OBJECTS_X2/2, player_position.x2 + self.CLOSE_OBJECTS_X2/2)
+            self.write_canvas(control.objective.x1, control.objective.x2, x1_range, x2_range, "o", "fuchsia")
+
+    def textify(self, item):
+        if type(item) == tuple:
+            return tuple(str(it) for it in item)
+        else:
+            return str(item)

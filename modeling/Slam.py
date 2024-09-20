@@ -24,12 +24,12 @@ class Slam:
             [0, 4]])
         # Measurement covariance in pixels
         self.R = np.array([
-            [436.410, 0],
-            [0, 989.1213]
+            [43.6410, 0],
+            [0, 98.91213]
         ])
 
         # chi square for 2 DF: 90% 4.605, 95% 5.991, 97.5% 7.378, 99% 9.21
-        self.MAHAL_THRESHOLD = 9.21  # Threshold of Mahalanobis distance for data association.
+        self.DIST_THRESHOLD = 1  # Threshold of Mahalanobis distance for data association.
         self.STATE_SIZE = 2  # State size [x,y]
         self.LM_SIZE = 2  # LM state size [x,y]
 
@@ -130,10 +130,10 @@ class Slam:
                                       initial_n_LM, lm_id_to_object, image_objs, 
                                       new_obj_list, world_model, n_LM, lm_points):
         """Calculate mahal dists, create new object and match object"""
-        mahal_dists, mahal_id_to_lm_id = self.calculate_mahal_dists(z, conv_z, iz, S, initial_n_LM, lm_id_to_object, 
+        dists, mahal_id_to_lm_id = self.calculate_mahal_dists(z, conv_z, iz, S, initial_n_LM, lm_id_to_object, 
                                                                     image_objs, xEst, PEst, world_model)
         
-        new_object, closest_idx, xEst, PEst, n_LM = self.create_new_object_if_needed(mahal_dists, z, conv_z, iz, S, 
+        new_object, closest_idx, xEst, PEst, n_LM = self.create_new_object_if_needed(dists, z, conv_z, iz, S, 
                                                                                         xEst, PEst, new_obj_list, image_objs, 
                                                                                         n_LM, world_model, lm_points)
         
@@ -145,7 +145,7 @@ class Slam:
     
     def calculate_mahal_dists(self, z, conv_z, iz, S, initial_n_LM, lm_id_to_object, image_objs, xEst, PEst, 
                               world_model : WorldModel):
-        mahal_dists = []
+        dists = []
         iz1 = self.LM_SIZE*iz
         iz2 = self.LM_SIZE*iz+self.LM_SIZE
         conversion_jacob = world_model.jacob_inverseH(z[iz1, 0], z[iz1+1, 0])
@@ -170,13 +170,13 @@ class Slam:
                 continue
             # covariance of landmark i + player covariance + covariance of observation
             cov_i = PEst[i1:i2, i1:i2] + PEst[0:S, 0:S] + conversion_jacob @ self.R @ conversion_jacob.T
-            mahal_dist = self.mahal_dist(xEst[0:S]+conv_z[iz1:iz2], xEst[i1:i2], cov_i)
+            # mahal_dist = self.mahal_dist(xEst[0:S]+conv_z[iz1:iz2], xEst[i1:i2], cov_i)
             # mahal_dist = dist.T @ np.linalg.inv(cov_i) @ dist
-            mahal_id_to_lm_id[len(mahal_dists)] = i
-            mahal_dists.append(mahal_dist)
+            mahal_id_to_lm_id[len(dists)] = i
+            dists.append(dist[0, 0]**2 + dist[1, 0]**2)
         
         if self.debug:
-            assert len(mahal_id_to_lm_id) == len(mahal_dists)
+            assert len(mahal_id_to_lm_id) == len(dists)
             assert len(self.filtered_observations) + len(mahal_id_to_lm_id) == initial_n_LM
             # prev_v = -1
             # for k, v in mahal_id_to_lm_id.items():
@@ -186,26 +186,27 @@ class Slam:
             #     # calculate cov again to confirm mahal_id_to_lm_id is correct
             #     cov_i = PEst[S+2*v:S+2*v+2, S+2*v:S+2*v+2] + PEst[0:S,0:S] + conversion_jacob @ self.R @ conversion_jacob.T
             #     mahal_dist = self.mahal_dist(xEst[0:S]+conv_z[iz1:iz2], xEst[S+2*v:S+2*v+2], cov_i)
-            #     assert mahal_dist == mahal_dists[k]
+            #     assert mahal_dist == dists[k]
 
             #     prev_v = v
 
             # for i in range(prev_v+1, initial_n_LM):
             #     assert i in self.filtered_observations
 
-        return mahal_dists, mahal_id_to_lm_id
+        return dists, mahal_id_to_lm_id
 
-    def create_new_object_if_needed(self, mahal_dists, z, conv_z, iz, S, xEst, PEst, new_obj_list, image_objs, n_LM, world_model : WorldModel, lm_points):
+    def create_new_object_if_needed(self, dists, z, conv_z, iz, S, xEst, PEst, new_obj_list, image_objs, n_LM, world_model : WorldModel, lm_points):
         iz1 = self.LM_SIZE*iz
         iz2 = self.LM_SIZE*iz+self.LM_SIZE
-        if len(mahal_dists) > 0:
-            closest_idx = np.argmin(mahal_dists)
+        if len(dists) > 0:
+            closest_idx = np.argmin(dists)
         new_object = False
-        if len(mahal_dists) == 0 or mahal_dists[closest_idx] > self.MAHAL_THRESHOLD:
+        if len(dists) == 0 or dists[closest_idx] > self.DIST_THRESHOLD:
             # new landmark
             # initial covariance is equal to our position's covariance + observation covariance
             conversion_jacob = world_model.jacob_inverseH(z[iz1, 0], z[iz1+1, 0])
-            initP = PEst[0:S, 0:S] + conversion_jacob @ self.R @ conversion_jacob.T
+            # initP = PEst[0:S, 0:S] + conversion_jacob @ self.R @ conversion_jacob.T
+            initP = conversion_jacob @ self.R @ conversion_jacob.T # hack to make landmarks have low covariance
             new_xEst = np.vstack((xEst, xEst[0:S]+conv_z[iz1:iz2]))
             # TEMPORARY HORRIBLE NASTY HACK
             new_PEst = np.vstack((np.hstack((PEst, np.zeros((len(xEst), self.LM_SIZE)))),
@@ -368,9 +369,9 @@ class SlamTimer(Slam):
         self.time_records["calculate_mahal_dists"].append([t2-t1])
         return return_value
     
-    def create_new_object_if_needed(self, mahal_dists, z, conv_z, iz, S, xEst, PEst, new_obj_list, image_objs, n_LM, world_model, lm_points):
+    def create_new_object_if_needed(self, dists, z, conv_z, iz, S, xEst, PEst, new_obj_list, image_objs, n_LM, world_model, lm_points):
         t1 = time.time_ns()
-        return_value = super().create_new_object_if_needed(mahal_dists, z, conv_z, iz, S, xEst, PEst, new_obj_list, image_objs, n_LM, world_model, lm_points)
+        return_value = super().create_new_object_if_needed(dists, z, conv_z, iz, S, xEst, PEst, new_obj_list, image_objs, n_LM, world_model, lm_points)
         t2 = time.time_ns()
         self.time_records["create_new_object_if_needed"].append([t2-t1])
         return return_value

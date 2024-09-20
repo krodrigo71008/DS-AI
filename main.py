@@ -164,7 +164,7 @@ def control_main(detected_objects_queue: Queue, segmentation_queue: Queue, shoul
 
 if __name__ == "__main__":
     debug = True
-    should_record_times = True
+    should_record_times = False
     if debug:
         should_start = Value('b', 0)
         should_stop = Value('b', 0)
@@ -224,15 +224,3 @@ if __name__ == "__main__":
     vision_process.join()
     segmentation_process.join()
     control_process.join()
-obj1.index = 0
-obj2.index = 2
-obj4.index = 4
-obj5.index = 6
-1
-2
-3
-4
-7
-8
-9
-10

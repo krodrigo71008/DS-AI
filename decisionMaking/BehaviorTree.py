@@ -4,6 +4,7 @@ from enum import Enum
 
 if TYPE_CHECKING:
     from modeling.Modeling import Modeling
+    from modeling.objects.ObjectModel import ObjectModel
     from decisionMaking.ActionRequester import ActionRequester
 
 
@@ -145,7 +146,7 @@ class CompositeNode(TreeNode):
     """
     def __init__(self, node_name):
         super().__init__(node_name)
-        self.children = []
+        self.children : list[TreeNode] = []
 
     def add_child(self, child):
         """
@@ -262,16 +263,24 @@ class DSBehaviorTree(BehaviorTree):
     """
     def __init__(self):
         super().__init__()
-        self.root = LoopNode(SelectorNode("Select1"))
-        self.root.looped_node.add_child(SequenceNode("Sequence1"))
-        self.root.looped_node.add_child(SequenceNode("Sequence2"))
-        self.root.looped_node.add_child(SequenceNode("Sequence3"))
+        self.root = LoopNode(SelectorNode("Root"))
+        self.root.looped_node.add_child(SequenceNode("CheckHandleUnequipTorch"))
+        self.root.looped_node.add_child(SequenceNode("CheckHandleGrassTwigs"))
+        self.root.looped_node.add_child(SequenceNode("CheckHandleTorch"))
         self.root.looped_node.add_child(GatherFood())
         self.root.looped_node.children[0].add_child(CheckTorchEquipped())
         self.root.looped_node.children[0].add_child(IsDayTime())
         self.root.looped_node.children[0].add_child(UnequipTorch())
         self.root.looped_node.children[1].add_child(NegateNode(CheckEnoughGrassTwigs()))
-        self.root.looped_node.children[1].add_child(GatherGrassTwigs())
+        self.root.looped_node.children[1].add_child(SelectorNode("GatherGrassTwigs"))
+        self.root.looped_node.children[1].children[1].add_child(SequenceNode("CheckHandleKnownResources"))
+        self.root.looped_node.children[1].children[1].children[0].add_child(NegateNode(CheckKnownGrassTwigs()))
+        self.root.looped_node.children[1].children[1].children[0].add_child(SelectorNode("Explore"))
+        self.root.looped_node.children[1].children[1].children[0].children[1].add_child(SequenceNode("CheckHandleNextPoint"))
+        self.root.looped_node.children[1].children[1].children[0].children[1].children[0].add_child(CheckNextPointValid())
+        self.root.looped_node.children[1].children[1].children[0].children[1].children[0].add_child(GoNextPoint())
+        self.root.looped_node.children[1].children[1].children[0].children[1].add_child(GoValidPoint())
+        self.root.looped_node.children[1].children[1].add_child(GetKnownResources())
         self.root.looped_node.children[2].add_child(NegateNode(CheckTorch()))
         self.root.looped_node.children[2].add_child(CraftTorch())
 
@@ -292,9 +301,82 @@ class CheckEnoughGrassTwigs(LeafNode):
             return ExecutionStatus.SUCCESS
 
 
-class GatherGrassTwigs(LeafNode):
+class CheckKnownGrassTwigs(LeafNode):
     def __init__(self):
-        super().__init__("GatherGrassTwigs")
+        super().__init__("CheckKnownGrassTwigs")
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        pass
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        obj_lists = modeling.world_model.get_all_of(["Grass", "Sapling", "CutGrass", "Twigs"], filter_="only_not_harvested")
+        all_objects : list[ObjectModel] = []
+        for obj_list in obj_lists.values():
+            all_objects = [*all_objects, *obj_list]
+
+        if len(all_objects) == 0:
+            return ExecutionStatus.FAILURE
+        else:
+            return ExecutionStatus.SUCCESS
+
+
+class CheckNextPointValid(LeafNode):
+    def __init__(self):
+        super().__init__("CheckNextPointValid")
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        pass
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        if modeling.world_model.check_if_next_target_valid():
+            return ExecutionStatus.SUCCESS
+        else:
+            return ExecutionStatus.FAILURE
+
+class GoNextPoint(LeafNode):
+    def __init__(self):
+        super().__init__("GoNextPoint")
+        self.start_time = None
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        self.start_time = modeling.clock.time()
+        # set the behavior
+        action_requester.set_action(("go", modeling.world_model.next_exploration_point))
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        if (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
+            >= modeling.world_model.CLOSE_DISTANCE_TO_EXPLORATION_POINT):
+            return ExecutionStatus.RUNNING
+        elif modeling.clock.time() - self.start_time >= 60:
+            return ExecutionStatus.FAILURE
+        else:
+            return ExecutionStatus.SUCCESS
+
+class GoValidPoint(LeafNode):
+    def __init__(self):
+        super().__init__("GoValidPoint")
+        self.start_time = None
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        modeling.world_model.search_for_valid_exploration_point()
+        next_point = modeling.world_model.next_exploration_point
+
+        self.start_time = modeling.clock.time()
+        # set the behavior
+        action_requester.set_action(("go", next_point))
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        if (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
+            >= modeling.world_model.CLOSE_DISTANCE_TO_EXPLORATION_POINT):
+            return ExecutionStatus.RUNNING
+        elif modeling.clock.time() - self.start_time >= 60:
+            return ExecutionStatus.FAILURE
+        else:
+            return ExecutionStatus.SUCCESS
+
+class GetKnownResources(LeafNode):
+    def __init__(self):
+        super().__init__("GetKnownResources")
         self.start_time = None
 
     def enter(self, modeling : Modeling, action_requester : ActionRequester):

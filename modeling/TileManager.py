@@ -5,10 +5,25 @@ class TileManager:
     def __init__(self):
         # tiles is a XxYxN array, with N being number of detections recorded (e.g. N=10 means that 
         # we record the latest 10 detections of that tile)
+        # classes reminder:
+        # bg
+        # forest
+        # grass
+        # marsh
+        # ocean
+        # rocky
+        # savanna
+        # spider_web
         self.tiles : np.ndarray = None
         self._x1_shift : int = 0
         self._x2_shift : int = 0
         self._MAX_QUEUE_SIZE : int = 5
+        self.color_names_to_numbers : dict[str, int] = {}
+        with open("perception/segmentation/classes.txt") as file:
+            lines = file.readlines()
+            for i, name in enumerate(lines):
+                self.color_names_to_numbers[name.strip()] = i
+
 
     def _map_index_to_actual_index(self, xy : tuple[int, int]) -> tuple[int, int]:
         x, y = xy
@@ -38,7 +53,11 @@ class TileManager:
             return None
         
         # [0] gets values, [1] gets counts
-        results = mode(self.tiles[conv_p11:conv_p21+1, conv_p12:conv_p22+1, :], axis=2, keepdims=False)[0]
+        try:
+            results = mode(self.tiles[conv_p11:conv_p21+1, conv_p12:conv_p22+1, :], axis=2, keepdims=False)[0]
+        except Exception as e:
+            print(conv_p11, conv_p21, conv_p12, conv_p22, e)
+            raise Exception("aaa")
         return results
 
     def get_tile(self, p : tuple[int, int]) -> np.ndarray:
@@ -107,3 +126,8 @@ class TileManager:
                     conv_j, conv_i = self._map_index_to_actual_index((coords[0]+j, coords[1]+i))
                     self.tiles[conv_j, conv_i, 1:] = self.tiles[conv_j, conv_i, :-1]
                     self.tiles[conv_j, conv_i, 0] = tile_id
+
+    def add_tile(self, p : tuple[int, int], value : int):
+        conv_p1, conv_p2 = self._map_index_to_actual_index(p)
+        self.tiles[conv_p1, conv_p2, 1:] = self.tiles[conv_p1, conv_p2, :-1]
+        self.tiles[conv_p1, conv_p2, 0] = value

@@ -60,6 +60,7 @@ class DecisionMaking:
                 all_objects = [*all_objects, *obj_list]
             locations = [obj.position() for obj in all_objects]
             if len(locations) == 0:
+                self.choose_next_exploration_point(modeling)
                 self.secondary_action = ("explore", modeling.world_model)
             else:
                 self.choose_destination(locations, modeling.player_position(), all_objects)
@@ -67,6 +68,8 @@ class DecisionMaking:
             self.secondary_action = ("craft", self.primary_action[1])
         elif self.primary_action[0] == "unequip":
             self.secondary_action = ("unequip", "Hand")
+        elif self.primary_action[0] == "go":
+            self.secondary_action = ("go_precisely_to", self.primary_action[1])
 
     # takes control when needed
     def emergency_system(self, modeling: Modeling) -> None:
@@ -111,6 +114,9 @@ class DecisionMaking:
     # helps with inventory management
     def inventory_management_system(self, modeling: Modeling) -> None:
         pass
+
+    def choose_next_exploration_point(self, modeling: Modeling) -> None:
+        player_position = modeling.player_position()
 
     def choose_destination(self, objectives: list[Point2d], player_position: Point2d,
                            all_objects: list[ObjectModel]) -> None:

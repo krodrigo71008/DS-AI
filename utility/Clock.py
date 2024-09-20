@@ -142,6 +142,15 @@ class ClockMock(Clock):
         if self.current_time_index == len(self.times_to_return):
             return None
         return self.times_to_return[self.current_time_index]
+    
+class ClockFake(Clock):
+    """This just a clock that doesn't update, so you can change its parameters manually and it won't change
+    """
+    def __init__(self, start_time=0):
+        super().__init__(start_time)
+    
+    def update(self):
+        pass
 
 class ClockRecorder(Clock):
     def __init__(self, start_time=0.):

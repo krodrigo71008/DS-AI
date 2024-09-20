@@ -25,6 +25,9 @@ class Point2d:
 
     def __truediv__(self, number):
         return Point2d(self.x1/number, self.x2/number)
+    
+    def __eq__(self, other: object) -> bool:
+        return self.x1 == other.x1 and self.x2 == other.x2
 
     def distance(self, other : "Point2d") -> float:
         return math.sqrt((self.x1-other.x1)**2+(self.x2-other.x2)**2)
@@ -32,6 +35,15 @@ class Point2d:
     def angle(self) -> float:
         # this returns a value between pi and -pi
         return math.atan2(self.x2, self.x1)
+
+    def angle_with(self, other : "Point2d") -> float:
+        # this returns a value between pi and -pi from this vector to the other
+        angle = other.angle() - self.angle()
+        if angle > math.pi:
+            angle -= math.pi*2
+        if angle <= -math.pi:
+            angle += math.pi*2
+        return angle
 
     def rotate(self, angle : float):
         """Rotate point around the origin by angle

@@ -44,6 +44,10 @@ class Modeling:
         self.player_model = PlayerModel(self.clock)
         self.world_model = WorldModel(self, self.clock, debug)
 
+        self.player_momentum : Point2d = None
+        self.last_player_position : Point2d = None
+        self.MOMENTUM_FACTOR = 0.25
+
         if self.debug:
             # self.pests = []
             self.dt_record = []
@@ -89,6 +93,16 @@ class Modeling:
 
     def update_player_model(self) -> None:
         self.player_model.update()
+        if self.last_player_position is None:
+            self.last_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0])
+        else:
+            momentum_aux = Point2d(self.xEst[0, 0], self.xEst[1, 0]) - self.last_player_position
+            if self.player_momentum is None:
+                self.player_momentum = momentum_aux
+            else:
+                self.player_momentum = momentum_aux*self.MOMENTUM_FACTOR + self.player_momentum*(1-self.MOMENTUM_FACTOR)
+            self.last_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0])
+            
 
     def slam_predict(self, dt = None) -> None:
         if self._direction is None:
@@ -104,19 +118,19 @@ class Modeling:
 
     def use_received_yolo_info(self, obj_list : list[ImageObject]) -> None:
         if self.received_yolo_info:
-            player_positions = [Point2d.bottom_from_box(obj.box) for obj in obj_list if objects_info.get_item_info(image_id=obj.id, info="object_type") == "PLAYER"]
-            # decide which of the detected player positions is the real one
-            self.world_model.decide_player_position(player_positions)
-
             if self._direction is None:
                 past_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0])
             else:
                 # latest_yolo_timestamp is when yolo sent the information, the clock timestamp is when Modeling starts its loop
                 # this means dt should be negative, which is why we add it instead of subtracting it
                 dt = self.latest_yolo_timestamp - self.clock.raw_timestamp()
-                assert dt < 0
+                assert dt <= 0
                 past_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0]) + Point2d(math.cos(self._direction), math.sin(self._direction))*dt*self.DEFAULT_SPEED
             
+            player_positions = [Point2d.bottom_from_box(obj.box) for obj in obj_list if objects_info.get_item_info(image_id=obj.id, info="object_type") == "PLAYER"]
+            # decide which of the detected player positions is the real one
+            self.world_model.decide_player_position(player_positions)
+
             observations, conv_observations, image_objs = self.world_model.handle_yolo_info(obj_list, past_player_position)
             if self.debug:
                 self.latest_observations = observations

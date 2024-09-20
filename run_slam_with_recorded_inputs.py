@@ -122,8 +122,10 @@ if __name__ == "__main__":
             modeling.latest_segmentation_timestamp = seg_timestamp
         
 
-        # timestamp to analyze problems: clock.current_time_index == 22
+        # timestamp to analyze problems: clock.current_time_index == 11
         modeling.update_model_using_info(detected_objects, segmentation_results)
+
+        # np.save(f"tile_records/tiles_{clock.current_time_index - 2}.npy", modeling.world_model.tile_manager.tiles)
 
         # compare expected observations with observations
         expected_z, expected_conv_z = calculate_expected_observations(landmarks, modeling.player_position(), modeling)

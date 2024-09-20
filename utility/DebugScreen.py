@@ -161,7 +161,7 @@ class DebugScreen:
             self.draw_shape(self.player_position.x1, self.player_position.x2, "circle", "global", x1_range, x2_range)
             self.draw_std(self.player_position.x1, self.player_position.x2, self.player_std, "global", x1_range, x2_range)
             if self.objective is not None:
-                self.draw_shape(self.objective.x1, self.objective.x2, "x", "global", x1_range, x2_range)
+                self.draw_shape(self.objective.x1, self.objective.x2, "x", "global", x1_range, x2_range, "blue")
             if len(self.fov_corners) > 0:
                 self.draw_fov(self.fov_corners, "global", x1_range, x2_range)
             self.draw_chunk_lines_world_canvas(CHUNK_SIZE, x1_range, x2_range)
@@ -231,7 +231,8 @@ class DebugScreen:
             map_.create_line(x, 0, x, self.WORLD_CANVAS_HEIGHT)
 
     def draw_shape(self, x1 : float, x2 : float, shape : str, canvas_name : str, 
-                   x1_range : tuple[float, float], x2_range : tuple[float, float]):
+                   x1_range : tuple[float, float], x2_range : tuple[float, float],
+                   color : str = "black"):
         """Draw shape on the specified canvas
 
         :param x1: x1 position
@@ -246,6 +247,8 @@ class DebugScreen:
         :type x1_range: tuple[float, float]
         :param x2_range: x2 range of objects that should be drawn
         :type x2_range: tuple[float, float]
+        :param color: color of object to be drawn
+        :type color: str, defaults to black
         """
         # if canvas_name == "local":
         #     map_ = self.local_map
@@ -258,14 +261,14 @@ class DebugScreen:
         else:
             raise ValueError("Wrong usage!")
         if shape == "triangle":
-            map_.create_polygon(x, y-6, x-4, y+2, x+4, y+2)
+            map_.create_polygon(x, y-6, x-4, y+2, x+4, y+2, outline=color)
         elif shape == "circle":
-            map_.create_oval(x-4, y-4, x+4, y+4)
+            map_.create_oval(x-4, y-4, x+4, y+4, outline=color)
         elif shape == "square":
-            map_.create_rectangle(x-4, y-4, x+4, y+4)
+            map_.create_rectangle(x-4, y-4, x+4, y+4, outline=color)
         elif shape == "x":
-            map_.create_line(x-6, y-6, x+6, y+6, fill="red")
-            map_.create_line(x+6, y-6, x-6, y+6, fill="red")
+            map_.create_line(x-6, y-6, x+6, y+6, fill=color)
+            map_.create_line(x+6, y-6, x-6, y+6, fill=color)
 
     def draw_std(self, x1 : float, x2 : float, std : tuple[float, float], canvas_name : str, 
                  x1_range : tuple[float, float], x2_range : tuple[float, float]):

@@ -581,6 +581,42 @@ def aux_test_covariance_with_jacob_inverseH(u, v):
     mean_error = np.abs((measured_cov - expected_cov)/expected_cov).mean()
     return mean_error
 
+def test_search_for_valid_exploration_point():
+    modeling = Modeling(debug=True)
+    image = np.zeros((512, 512))
+    image[:128, :] = modeling.world_model.tile_manager.color_names_to_numbers["ocean"]
+    image[128:, :] = modeling.world_model.tile_manager.color_names_to_numbers["forest"]
+    modeling.world_model.start_cycle(modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.search_for_valid_exploration_point()
+    assert modeling.world_model.next_exploration_point == Point2d(2, 6)
+    image = np.zeros((512, 512))
+    image[:64, :] = modeling.world_model.tile_manager.color_names_to_numbers["ocean"]
+    image[64:, :] = modeling.world_model.tile_manager.color_names_to_numbers["forest"]
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.search_for_valid_exploration_point()
+    assert modeling.world_model.next_exploration_point == Point2d(-2, 2)
+    image = np.zeros((512, 512))
+    image[:, 448:] = modeling.world_model.tile_manager.color_names_to_numbers["ocean"]
+    image[:, :448] = modeling.world_model.tile_manager.color_names_to_numbers["forest"]
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.process_segmentation_image(image, modeling.player_position())
+    modeling.world_model.search_for_valid_exploration_point()
+    assert modeling.world_model.next_exploration_point == Point2d(-2, -2)
+    modeling.world_model.tile_manager.tiles 
+    print("a")
+
 
 # start 32
 # im1 = 119 -> 8.6 from left

@@ -18,7 +18,7 @@ from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
 from modeling.Factory import factory
 from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_TO_ADMIT_OBJECT, CYCLES_TO_ADMIT_MOB
 from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING, CHUNK_SIZE, DISTANCE_FOR_VALID_PLAYER_POSITION
-from modeling.constants import TILE_SIZE, FOLLOW_HEIGHT
+from modeling.constants import TILE_SIZE, FOLLOW_HEIGHT, PLAYER_BASE_SPEED
 from modeling.ObjectsInfo import objects_info
 from modeling.Scheduler import Scheduler
 from modeling.SlamIndexManager import SlamIndexManager
@@ -86,6 +86,12 @@ class WorldModel:
         self.debug = debug
         self.latest_debug_image : Image.Image = None
 
+        self.next_exploration_point : Point2d = None
+        self.CLOSE_DISTANCE_TO_EXPLORATION_POINT = 2
+        self.EXPLORATION_PERIOD = 3
+        self.EXPLORATION_ANGLE = -135 # this should mean that we explore the direction the camera is facing
+        self.MAX_EXPLORATION_POINTS_LEN = 10
+
     @staticmethod
     def coords_to_chunk_coords(p : Point2d) -> Point2d:
         """Convert coordinates to chunk coordinates, bounded in [0, CHUNK_SIZE]
@@ -121,7 +127,7 @@ class WorldModel:
         count = 0
         for obj_chunk_list in self.objects_by_chunks.values():
             count += len(obj_chunk_list)
-        print(f"before objects_by_chunks deletion: {count}")
+        # print(f"before objects_by_chunks deletion: {count}")
         chunk_index = self.point_to_chunk_index(obj.position())
         # if obj is in the chunk we expect it to be
         if chunk_index in self.objects_by_chunks.keys() and obj in self.objects_by_chunks[chunk_index]:
@@ -132,15 +138,14 @@ class WorldModel:
         count = 0
         for obj_chunk_list in self.objects_by_chunks.values():
             count += len(obj_chunk_list)
-        print(f"after objects_by_chunks deletion: {count}")
+        # print(f"after objects_by_chunks deletion: {count}")
         
-        print(f"before object_lists deletion: {len(self.object_lists[obj.name_str()])}")
+        # print(f"before object_lists deletion: {len(self.object_lists[obj.name_str()])}")
         self.object_lists[obj.name_str()].remove(obj)
-        print(f"after object_lists deletion: {len(self.object_lists[obj.name_str()])}")
-        
+        # print(f"after object_lists deletion: {len(self.object_lists[obj.name_str()])}")
 
-    def warp_image_to_ground(self, image: np.ndarray, heading : float, pitch : float, 
-                             distance : float, fov : float) -> tuple[np.ndarray, tuple[float, float], tuple[float, float]]:
+    def warp_image_to_ground(self, image: np.ndarray, heading : float = CAMERA_HEADING, pitch : float = CAMERA_PITCH, 
+                             distance : float = CAMERA_DISTANCE, fov : float = FOV) -> tuple[np.ndarray, tuple[float, float], tuple[float, float]]:
         """Warp image to transform a camera image to the ground coordinates
 
         :param image: game image from camera's perspective
@@ -585,9 +590,9 @@ class WorldModel:
                     else:
                         # if the object wasn't detected, we remove it
                         self.modeling.remove_from_slam_state(obj.slam_state_index())
-                        print(f"before recent objects deletion: {len(self.recent_objects)}")
+                        # print(f"before recent objects deletion: {len(self.recent_objects)}")
                         del self.recent_objects[obj_index]
-                        print(f"after recent objects deletion: {len(self.recent_objects)}")
+                        # print(f"after recent objects deletion: {len(self.recent_objects)}")
                         # update index to object mapping
                         index_ = (obj.slam_state_index() - 2) // 2
                         assert self.modeling.lm_id_to_object[index_] == obj
@@ -967,6 +972,71 @@ class WorldModel:
             [x_u, x_v],
             [z_u, z_v]
         ])
+    
+    def make_next_exploration_point(self):
+        delta_pos = Point2d(PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.cos(self.EXPLORATION_ANGLE*math.pi/180),
+                            PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.sin(self.EXPLORATION_ANGLE*math.pi/180))
+        self.next_exploration_point = self.modeling.player_position() + delta_pos
+
+    def check_if_next_target_valid(self):
+        if (self.next_exploration_point is None or 
+            self.next_exploration_point.distance(self.modeling.player_position()) < self.CLOSE_DISTANCE_TO_EXPLORATION_POINT):
+            self.make_next_exploration_point()
+        
+        tile_index = (int(self.next_exploration_point.x1//TILE_SIZE), int(self.next_exploration_point.x2//TILE_SIZE))
+        tiles = self.tile_manager.get_tiles((tile_index[0]-1, tile_index[1]-1), (tile_index[0]+1, tile_index[1]+1))
+        # if there are unknown tiles, the objective is valid, if there are no ocean tiles, it is also valid
+        if tiles is None or not (tiles == self.tile_manager.color_names_to_numbers["ocean"]).any():
+            return True
+        
+        return False
+    
+    def search_for_valid_exploration_point(self) -> None:
+        # use openCV stuff for dilation of ocean, then get stuff at border
+        x_min = min(self.c1.x1, self.c2.x1, self.c3.x1, self.c4.x1)
+        y_min = min(self.c1.x2, self.c2.x2, self.c3.x2, self.c4.x2)
+        x_max = max(self.c1.x1, self.c2.x1, self.c3.x1, self.c4.x1)
+        y_max = max(self.c1.x2, self.c2.x2, self.c3.x2, self.c4.x2)
+        first_x_line = int((x_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE)
+        first_y_line = int((y_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE)
+        last_x_line = int((x_max // TILE_SIZE) * TILE_SIZE - TILE_SIZE)
+        last_y_line = int((y_max // TILE_SIZE) * TILE_SIZE - TILE_SIZE)
+        tiles = self.tile_manager.get_tiles((first_x_line//TILE_SIZE, first_y_line//TILE_SIZE), (last_x_line//TILE_SIZE, last_y_line//TILE_SIZE))
+        tiles_ocean = tiles == self.tile_manager.color_names_to_numbers["ocean"]
+        dilated_tiles_ocean = cv2.dilate(tiles_ocean.astype(np.uint8), np.ones((5, 5)))
+        borders = cv2.Laplacian(dilated_tiles_ocean, -1)
+        player_tile = (self.modeling.player_position().x1 // TILE_SIZE, self.modeling.player_position().x2 // TILE_SIZE)
+        x_candidates, y_candidates = np.where(borders != 0)
+        closest_manh_dist = None
+        closest_candidates : list[Point2d] = []
+        for i in range(x_candidates.shape[0]):
+            # tile indexes
+            x = x_candidates[i] + first_x_line//TILE_SIZE
+            y = y_candidates[i] + first_y_line//TILE_SIZE
+
+            point = Point2d(x*TILE_SIZE + TILE_SIZE//2, y*TILE_SIZE + TILE_SIZE//2)
+
+            delta_x = abs(x - player_tile[0])
+            delta_y = abs(y - player_tile[1])
+            manh_dist = max(delta_x, delta_y)
+            if manh_dist == 0:
+                continue
+            if closest_manh_dist is None or closest_manh_dist >= manh_dist:
+                if closest_manh_dist is None or closest_manh_dist > manh_dist:
+                    closest_candidates = []
+                closest_manh_dist = manh_dist
+                closest_candidates.append(point)
+        if len(closest_candidates) == 1:
+            self.next_exploration_point = closest_candidates[0]
+        elif len(closest_candidates) > 1:
+            min_angle_diff = None
+            best_candidate = None
+            for candidate in closest_candidates:
+                angle = abs(candidate.angle_with(self.modeling.player_momentum))
+                if min_angle_diff is None or angle < min_angle_diff:
+                    min_angle_diff = angle
+                    best_candidate = candidate
+            self.next_exploration_point = best_candidate
         
 
 class WorldModelTimer(WorldModel):
@@ -980,7 +1050,8 @@ class WorldModelTimer(WorldModel):
         t2  = time.time_ns()
         self.time_records_list.append(("remove_object", t2-t1))
     
-    def warp_image_to_ground(self, image: np.ndarray, heading: float, pitch: float, distance: float, fov: float) -> tuple[np.ndarray, tuple[float, float], tuple[float, float]]:
+    def warp_image_to_ground(self, image: np.ndarray, heading: float = CAMERA_HEADING, pitch: float = CAMERA_PITCH, 
+                             distance: float = CAMERA_DISTANCE, fov: float = FOV) -> tuple[np.ndarray, tuple[float, float], tuple[float, float]]:
         t1 = time.time_ns()
         return_value = super().warp_image_to_ground(image, heading, pitch, distance, fov)
         t2  = time.time_ns()
