@@ -211,74 +211,77 @@ class Control:
         #     if time.time_ns() - self.start_time >= MOUSE_CLICK_DURATION:
         #         self.action_in_progress = False
         
-        if self.action_in_progress == False and self.update_at_end is not None:
-            return_value = None
-            if self.update_at_end[0] == "pick_up":
-                # update_at_end[1] is the Modeling Object
-                obj_name = self.update_at_end[1].name_str()
-                # update the inventory depending on the collected object
-                if obj_name == "BerryBush":
-                    modeling.player_model.inventory.add_item("Berries", 1)
-                    self.update_at_end[1].harvest()
-                elif obj_name == "Grass":
-                    modeling.player_model.inventory.add_item("CutGrass", 1)
-                    self.update_at_end[1].harvest()
-                elif obj_name == "Sapling":
-                    modeling.player_model.inventory.add_item("Twigs", 1)
-                    self.update_at_end[1].harvest()
-                else:
-                    modeling.player_model.inventory.add_item(obj_name, 1)
-                return_value = False
-                self.pick_up_state = None
-                self.just_finished_action = True
-            elif self.update_at_end[0] == "eat":
-                # update player stats depending on what we ate
-                food_stats = objects_info.get_item_info(info="food_stats", name=self.update_at_end[1])
-                modeling.player_model.health += food_stats[0]
-                modeling.player_model.hunger += food_stats[1]
-                modeling.player_model.sanity += food_stats[2]
-                return_value = False
-                self.just_finished_action = True
-            elif self.update_at_end[0] == "equip":
-                # update inventory accordingly
-                modeling.player_model.inventory.equip_item(self.update_at_end[1])
-                return_value = False
-                self.just_finished_action = True
-            elif self.update_at_end[0] == "unequip":
-                # update inventory accordingly
-                modeling.player_model.inventory.unequip_slot(self.update_at_end[1])
-                return_value = False
-                self.just_finished_action = True
-            elif self.update_at_end[0] == "craft":
-                # update inventory accordingly
-                modeling.player_model.inventory.craft(self.update_at_end[1])
-                return_value = False
-                self.just_finished_action = True
-            elif self.update_at_end[0] == "change_pick_up_state":
-                # change the internal pick up state
-                change = self.update_at_end[1]
-                self.pick_up_state = change
-                return_value = True
-            elif self.update_at_end[0] == "change_inv_state":
-                # change the internal inventory state
-                change = self.update_at_end[1]
-                if change == "up":
-                    self.current_crafting_tab -= 1
-                elif change == "down":
-                    self.current_crafting_tab += 1
-                elif change == "left":
-                    self.crafting_tabs_states[self.current_crafting_tab] -= 1
-                elif change == "right":
-                    self.crafting_tabs_states[self.current_crafting_tab] += 1
-                return_value = True
-            elif self.update_at_end[0] == "reset_player_direction":
-                # reset player model direction
-                modeling.set_direction(None)
-                return_value = True
-                self.just_finished_action = True
-            self.update_at_end = None
+        if self.action_in_progress == False:
+            if self.update_at_end is not None:
+                return_value = None
+                if self.update_at_end[0] == "pick_up":
+                    # update_at_end[1] is the Modeling Object
+                    obj_name = self.update_at_end[1].name_str()
+                    # update the inventory depending on the collected object
+                    if obj_name == "BerryBush":
+                        modeling.player_model.inventory.add_item("Berries", 1)
+                        self.update_at_end[1].harvest()
+                    elif obj_name == "Grass":
+                        modeling.player_model.inventory.add_item("CutGrass", 1)
+                        self.update_at_end[1].harvest()
+                    elif obj_name == "Sapling":
+                        modeling.player_model.inventory.add_item("Twigs", 1)
+                        self.update_at_end[1].harvest()
+                    else:
+                        modeling.player_model.inventory.add_item(obj_name, 1)
+                    return_value = False
+                    self.pick_up_state = None
+                    self.just_finished_action = True
+                elif self.update_at_end[0] == "eat":
+                    # update player stats depending on what we ate
+                    food_stats = objects_info.get_item_info(info="food_stats", name=self.update_at_end[1])
+                    modeling.player_model.health += food_stats[0]
+                    modeling.player_model.hunger += food_stats[1]
+                    modeling.player_model.sanity += food_stats[2]
+                    return_value = False
+                    self.just_finished_action = True
+                elif self.update_at_end[0] == "equip":
+                    # update inventory accordingly
+                    modeling.player_model.inventory.equip_item(self.update_at_end[1])
+                    return_value = False
+                    self.just_finished_action = True
+                elif self.update_at_end[0] == "unequip":
+                    # update inventory accordingly
+                    modeling.player_model.inventory.unequip_slot(self.update_at_end[1])
+                    return_value = False
+                    self.just_finished_action = True
+                elif self.update_at_end[0] == "craft":
+                    # update inventory accordingly
+                    modeling.player_model.inventory.craft(self.update_at_end[1])
+                    return_value = False
+                    self.just_finished_action = True
+                elif self.update_at_end[0] == "change_pick_up_state":
+                    # change the internal pick up state
+                    change = self.update_at_end[1]
+                    self.pick_up_state = change
+                    return_value = True
+                elif self.update_at_end[0] == "change_inv_state":
+                    # change the internal inventory state
+                    change = self.update_at_end[1]
+                    if change == "up":
+                        self.current_crafting_tab -= 1
+                    elif change == "down":
+                        self.current_crafting_tab += 1
+                    elif change == "left":
+                        self.crafting_tabs_states[self.current_crafting_tab] -= 1
+                    elif change == "right":
+                        self.crafting_tabs_states[self.current_crafting_tab] += 1
+                    return_value = True
+                elif self.update_at_end[0] == "reset_player_direction":
+                    # reset player model direction
+                    modeling.set_direction(None)
+                    return_value = True
+                    self.just_finished_action = True
+                self.update_at_end = None
 
-            return return_value
+                return return_value
+            return True
+
         if self.debug:
             self.records.append(("continue_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
                                  self.current_action, self.clock.time_in_seconds, self.update_at_end))

@@ -263,27 +263,46 @@ class DSBehaviorTree(BehaviorTree):
     """
     def __init__(self):
         super().__init__()
-        self.root = LoopNode(SelectorNode("Root"))
-        self.root.looped_node.add_child(SequenceNode("CheckHandleUnequipTorch"))
-        self.root.looped_node.add_child(SequenceNode("CheckHandleGrassTwigs"))
-        self.root.looped_node.add_child(SequenceNode("CheckHandleTorch"))
-        self.root.looped_node.add_child(GatherFood())
-        self.root.looped_node.children[0].add_child(CheckTorchEquipped())
-        self.root.looped_node.children[0].add_child(IsDayTime())
-        self.root.looped_node.children[0].add_child(UnequipTorch())
-        self.root.looped_node.children[1].add_child(NegateNode(CheckEnoughGrassTwigs()))
-        self.root.looped_node.children[1].add_child(SelectorNode("GatherGrassTwigs"))
-        self.root.looped_node.children[1].children[1].add_child(SequenceNode("CheckHandleKnownResources"))
-        self.root.looped_node.children[1].children[1].children[0].add_child(NegateNode(CheckKnownGrassTwigs()))
-        self.root.looped_node.children[1].children[1].children[0].add_child(SelectorNode("Explore"))
-        self.root.looped_node.children[1].children[1].children[0].children[1].add_child(SequenceNode("CheckHandleNextPoint"))
-        self.root.looped_node.children[1].children[1].children[0].children[1].children[0].add_child(CheckNextPointValid())
-        self.root.looped_node.children[1].children[1].children[0].children[1].children[0].add_child(GoNextPoint())
-        self.root.looped_node.children[1].children[1].children[0].children[1].add_child(GoValidPoint())
-        self.root.looped_node.children[1].children[1].add_child(GetKnownResources())
-        self.root.looped_node.children[2].add_child(NegateNode(CheckTorch()))
-        self.root.looped_node.children[2].add_child(CraftTorch())
+        self.root = SequenceNode("Root")
+        self.root.add_child(WaitForSegmentationInfo())
+        self.root.add_child(LoopNode(SelectorNode("MainLoop")))
+        self.root.children[1].looped_node.add_child(SequenceNode("CheckHandleUnequipTorch"))
+        self.root.children[1].looped_node.add_child(SequenceNode("CheckHandleGrassTwigs"))
+        self.root.children[1].looped_node.add_child(SequenceNode("CheckHandleTorch"))
+        self.root.children[1].looped_node.add_child(GatherFood())
+        self.root.children[1].looped_node.children[0].add_child(CheckTorchEquipped())
+        self.root.children[1].looped_node.children[0].add_child(IsDayTime())
+        self.root.children[1].looped_node.children[0].add_child(UnequipTorch())
+        self.root.children[1].looped_node.children[1].add_child(NegateNode(CheckEnoughGrassTwigs()))
+        self.root.children[1].looped_node.children[1].add_child(SelectorNode("GatherGrassTwigs"))
+        self.root.children[1].looped_node.children[1].children[1].add_child(SequenceNode("CheckHandleKnownResources"))
+        self.root.children[1].looped_node.children[1].children[1].children[0].add_child(NegateNode(CheckKnownGrassTwigs()))
+        self.root.children[1].looped_node.children[1].children[1].children[0].add_child(SelectorNode("Explore"))
+        self.root.children[1].looped_node.children[1].children[1].children[0].children[1].add_child(SequenceNode("CheckHandleNextPoint"))
+        self.root.children[1].looped_node.children[1].children[1].children[0].children[1].children[0].add_child(NegateNode(CheckOceanAround()))
+        self.root.children[1].looped_node.children[1].children[1].children[0].children[1].children[0].add_child(GoSomewhere())
+        self.root.children[1].looped_node.children[1].children[1].children[0].children[1].add_child(SelectorNode("PlannedExploration"))
+        self.root.children[1].looped_node.children[1].children[1].children[0].children[1].children[1].add_child(SequenceNode("HandleExploreInwards"))
+        self.root.children[1].looped_node.children[1].children[1].children[0].children[1].children[1].children[0].add_child(CheckLoopFinished())
+        self.root.children[1].looped_node.children[1].children[1].children[0].children[1].children[1].children[0].add_child(ExploreInwards())
+        self.root.children[1].looped_node.children[1].children[1].children[0].children[1].children[1].add_child(ExploreAroundOcean())
+        self.root.children[1].looped_node.children[1].children[1].add_child(GetKnownResources())
+        self.root.children[1].looped_node.children[2].add_child(NegateNode(CheckTorch()))
+        self.root.children[1].looped_node.children[2].add_child(CraftTorch())
 
+
+class WaitForSegmentationInfo(LeafNode):
+    def __init__(self):
+        super().__init__("WaitForSegmentationInfo")
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        action_requester.set_action(("nothing",))
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        if modeling.world_model.tile_manager.detection_count < modeling.world_model.tile_manager._MAX_QUEUE_SIZE:
+            return ExecutionStatus.RUNNING
+        else:
+            return ExecutionStatus.SUCCESS
 
 class CheckEnoughGrassTwigs(LeafNode):
     def __init__(self):
@@ -320,41 +339,71 @@ class CheckKnownGrassTwigs(LeafNode):
             return ExecutionStatus.SUCCESS
 
 
-class CheckNextPointValid(LeafNode):
+class CheckOceanAround(LeafNode):
     def __init__(self):
-        super().__init__("CheckNextPointValid")
+        super().__init__("CheckOceanAround")
 
     def enter(self, modeling : Modeling, action_requester : ActionRequester):
         pass
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
-        if modeling.world_model.check_if_next_target_valid():
+        if modeling.world_model.check_for_ocean_around():
             return ExecutionStatus.SUCCESS
         else:
             return ExecutionStatus.FAILURE
 
-class GoNextPoint(LeafNode):
+class GoSomewhere(LeafNode):
     def __init__(self):
-        super().__init__("GoNextPoint")
+        super().__init__("GoSomewhere")
         self.start_time = None
 
     def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        modeling.world_model.make_next_exploration_point()
         self.start_time = modeling.clock.time()
         # set the behavior
         action_requester.set_action(("go", modeling.world_model.next_exploration_point))
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
-        if (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
+        if modeling.clock.time() - self.start_time >= 60:
+            return ExecutionStatus.FAILURE
+        elif (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
             >= modeling.world_model.CLOSE_DISTANCE_TO_EXPLORATION_POINT):
             return ExecutionStatus.RUNNING
-        elif modeling.clock.time() - self.start_time >= 60:
-            return ExecutionStatus.FAILURE
         else:
             return ExecutionStatus.SUCCESS
 
-class GoValidPoint(LeafNode):
+class CheckLoopFinished(LeafNode):
     def __init__(self):
-        super().__init__("GoValidPoint")
+        super().__init__("CheckLoopFinished")
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        pass
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        if modeling.world_model.check_if_ocean_exploration_is_done():
+            return ExecutionStatus.SUCCESS
+        else:
+            return ExecutionStatus.FAILURE
+
+class ExploreInwards(LeafNode): # PLACEHOLDER
+    def __init__(self):
+        super().__init__("ExploreInwards")
+        self.start_time = None
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        self.start_time = modeling.clock.time()
+        # set the behavior
+        action_requester.set_action(("nothing",))
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        if modeling.clock.time() - self.start_time >= 60:
+            return ExecutionStatus.FAILURE
+        else:
+            return ExecutionStatus.RUNNING
+
+class ExploreAroundOcean(LeafNode):
+    def __init__(self):
+        super().__init__("ExploreAroundOcean")
         self.start_time = None
 
     def enter(self, modeling : Modeling, action_requester : ActionRequester):
@@ -366,11 +415,11 @@ class GoValidPoint(LeafNode):
         action_requester.set_action(("go", next_point))
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
-        if (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
+        if modeling.clock.time() - self.start_time >= 60:
+            return ExecutionStatus.FAILURE
+        elif (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
             >= modeling.world_model.CLOSE_DISTANCE_TO_EXPLORATION_POINT):
             return ExecutionStatus.RUNNING
-        elif modeling.clock.time() - self.start_time >= 60:
-            return ExecutionStatus.FAILURE
         else:
             return ExecutionStatus.SUCCESS
 
@@ -387,10 +436,10 @@ class GetKnownResources(LeafNode):
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
         cut_grass_count = modeling.player_model.inventory.get_inventory_count(["CutGrass"])[0]
         twigs_count = modeling.player_model.inventory.get_inventory_count(["Twigs"])[0]
-        if cut_grass_count < 4 or twigs_count < 4:
-            return ExecutionStatus.RUNNING
-        elif modeling.clock.time() - self.start_time >= 60:
+        if modeling.clock.time() - self.start_time >= 60:
             return ExecutionStatus.FAILURE
+        elif cut_grass_count < 4 or twigs_count < 4:
+            return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
 
@@ -422,10 +471,10 @@ class CraftTorch(LeafNode):
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
         torch_count = modeling.player_model.inventory.get_inventory_count(["Torch"])[0]
-        if torch_count < 1:
-            return ExecutionStatus.RUNNING
-        elif modeling.clock.time() - self.start_time >= 60:
+        if modeling.clock.time() - self.start_time >= 60:
             return ExecutionStatus.FAILURE
+        elif torch_count < 1:
+            return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
 
@@ -470,10 +519,10 @@ class UnequipTorch(LeafNode):
         action_requester.set_action(("unequip", "Hand"))
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
-        if modeling.player_model.inventory.get_inventory_slots()["Hand"].object is not None:
-            return ExecutionStatus.RUNNING
-        elif modeling.clock.time() - self.start_time >= 60:
+        if modeling.clock.time() - self.start_time >= 60:
             return ExecutionStatus.FAILURE
+        elif modeling.player_model.inventory.get_inventory_slots()["Hand"].object is not None:
+            return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
 

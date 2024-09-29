@@ -87,6 +87,12 @@ class WorldModel:
         self.latest_debug_image : Image.Image = None
 
         self.next_exploration_point : Point2d = None
+        self._latest_x_candidates = None
+        self._latest_y_candidates = None
+        self.ocean_exploration_start_point : Point2d = None
+        self.ocean_exploration_is_done : bool = False
+        self.ocean_exploration_points_list : list[tuple[float, float]] = []
+        self.MINIMUM_DISTANCE_TO_EXPLORATION_START = 6
         self.CLOSE_DISTANCE_TO_EXPLORATION_POINT = 2
         self.EXPLORATION_PERIOD = 3
         self.EXPLORATION_ANGLE = -135 # this should mean that we explore the direction the camera is facing
@@ -973,25 +979,12 @@ class WorldModel:
             [z_u, z_v]
         ])
     
-    def make_next_exploration_point(self):
+    def make_next_exploration_point(self) -> None:
         delta_pos = Point2d(PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.cos(self.EXPLORATION_ANGLE*math.pi/180),
                             PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.sin(self.EXPLORATION_ANGLE*math.pi/180))
         self.next_exploration_point = self.modeling.player_position() + delta_pos
 
-    def check_if_next_target_valid(self):
-        if (self.next_exploration_point is None or 
-            self.next_exploration_point.distance(self.modeling.player_position()) < self.CLOSE_DISTANCE_TO_EXPLORATION_POINT):
-            self.make_next_exploration_point()
-        
-        tile_index = (int(self.next_exploration_point.x1//TILE_SIZE), int(self.next_exploration_point.x2//TILE_SIZE))
-        tiles = self.tile_manager.get_tiles((tile_index[0]-1, tile_index[1]-1), (tile_index[0]+1, tile_index[1]+1))
-        # if there are unknown tiles, the objective is valid, if there are no ocean tiles, it is also valid
-        if tiles is None or not (tiles == self.tile_manager.color_names_to_numbers["ocean"]).any():
-            return True
-        
-        return False
-    
-    def search_for_valid_exploration_point(self) -> None:
+    def check_for_ocean_around(self) -> bool:
         # use openCV stuff for dilation of ocean, then get stuff at border
         x_min = min(self.c1.x1, self.c2.x1, self.c3.x1, self.c4.x1)
         y_min = min(self.c1.x2, self.c2.x2, self.c3.x2, self.c4.x2)
@@ -1003,18 +996,52 @@ class WorldModel:
         last_y_line = int((y_max // TILE_SIZE) * TILE_SIZE - TILE_SIZE)
         tiles = self.tile_manager.get_tiles((first_x_line//TILE_SIZE, first_y_line//TILE_SIZE), (last_x_line//TILE_SIZE, last_y_line//TILE_SIZE))
         tiles_ocean = tiles == self.tile_manager.color_names_to_numbers["ocean"]
-        dilated_tiles_ocean = cv2.dilate(tiles_ocean.astype(np.uint8), np.ones((5, 5)))
-        borders = cv2.Laplacian(dilated_tiles_ocean, -1)
+        # this means there's at least one tile of ocean in view
+        if tiles_ocean.any():
+            dilated_tiles_ocean = cv2.dilate(tiles_ocean.astype(np.uint8), np.ones((5, 5)))
+            borders = cv2.Laplacian(dilated_tiles_ocean, -1)
+            x_candidates, y_candidates = np.where(borders != 0)
+            for i in range(x_candidates.shape[0]):
+                x_candidates[i] += first_x_line//TILE_SIZE
+                y_candidates[i] += first_y_line//TILE_SIZE
+            self._latest_x_candidates = x_candidates
+            self._latest_y_candidates = y_candidates
+            return True
+        
+        return False
+
+
+    # def check_if_next_target_valid(self):
+    #     if (self.next_exploration_point is None or 
+    #         self.next_exploration_point.distance(self.modeling.player_position()) < self.CLOSE_DISTANCE_TO_EXPLORATION_POINT):
+    #         self.make_next_exploration_point()
+        
+    #     tile_index = (int(self.next_exploration_point.x1//TILE_SIZE), int(self.next_exploration_point.x2//TILE_SIZE))
+    #     tiles = self.tile_manager.get_tiles((tile_index[0]-2, tile_index[1]-2), (tile_index[0]+2, tile_index[1]+2))
+    #     # if there are unknown tiles, the objective is invalid
+    #     if tiles is None:
+    #         return False
+        
+    #     # if there are no ocean tiles, it is valid
+    #     elif not (tiles == self.tile_manager.color_names_to_numbers["ocean"]).any():
+    #         return True
+        
+    #     return False
+    
+    def search_for_valid_exploration_point(self) -> None:
         player_tile = (self.modeling.player_position().x1 // TILE_SIZE, self.modeling.player_position().x2 // TILE_SIZE)
-        x_candidates, y_candidates = np.where(borders != 0)
+        x_candidates = self._latest_x_candidates
+        y_candidates = self._latest_y_candidates
         closest_manh_dist = None
         closest_candidates : list[Point2d] = []
         for i in range(x_candidates.shape[0]):
             # tile indexes
-            x = x_candidates[i] + first_x_line//TILE_SIZE
-            y = y_candidates[i] + first_y_line//TILE_SIZE
+            x = x_candidates[i]
+            y = y_candidates[i]
 
             point = Point2d(x*TILE_SIZE + TILE_SIZE//2, y*TILE_SIZE + TILE_SIZE//2)
+            if (point.x1, point.x2) in self.ocean_exploration_points_list:
+                continue
 
             delta_x = abs(x - player_tile[0])
             delta_y = abs(y - player_tile[1])
@@ -1038,6 +1065,26 @@ class WorldModel:
                     best_candidate = candidate
             self.next_exploration_point = best_candidate
         
+        if self.ocean_exploration_start_point is None:
+            self.ocean_exploration_start_point = self.next_exploration_point
+
+        self.ocean_exploration_points_list.append((self.next_exploration_point.x1, self.next_exploration_point.x2))
+        
+    def check_if_ocean_exploration_is_done(self) -> bool:
+        if self.ocean_exploration_is_done:
+            return True
+        
+        if self.ocean_exploration_start_point is None:
+            return False
+        
+        if (len(self.ocean_exploration_points_list) > 20 
+            and self.modeling.player_position().distance(self.ocean_exploration_start_point) < self.MINIMUM_DISTANCE_TO_EXPLORATION_START):
+
+            self.ocean_exploration_is_done = True
+            return True
+        
+        return False
+
 
 class WorldModelTimer(WorldModel):
     def __init__(self, modeling: Modeling, clock: Clock, debug: bool = False):

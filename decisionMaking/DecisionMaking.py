@@ -70,6 +70,8 @@ class DecisionMaking:
             self.secondary_action = ("unequip", "Hand")
         elif self.primary_action[0] == "go":
             self.secondary_action = ("go_precisely_to", self.primary_action[1])
+        elif self.primary_action[0] == "nothing":
+            self.secondary_action = ("stop",)
 
     # takes control when needed
     def emergency_system(self, modeling: Modeling) -> None:

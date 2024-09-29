@@ -33,7 +33,7 @@ class FakeModeling():
         pass
 
 class DecisionMakingSimulator():
-    def __init__(self, runtime : float = 20.0) -> None:
+    def __init__(self, runtime : float = 200.0) -> None:
         self.PLAYER_SPEED = PLAYER_BASE_SPEED
         self.start_point = Point2d(2, 2)
         self.DT = 0.1
@@ -99,6 +99,8 @@ class DecisionMakingSimulator():
             for j in range(player_tile_j+self.tile_search_range[2], player_tile_j+self.tile_search_range[3]):
                 if self._is_tile_visible((i, j), self.modeling.player_position()):
                     self.modeling.world_model.tile_manager.add_tile((i, j), self.get_tile((i, j)))
+
+        self.modeling.world_model.tile_manager.detection_count += 1
 
     def _get_visible_landmarks(self, player_position : Point2d) -> list[tuple[int, Point2d]]:
         results = []
@@ -177,6 +179,7 @@ class DecisionMakingSimulator():
         self.visualizer.draw_time(self.clock.time())
         self.visualizer.write_decision_making_control(self.decision_making, self.control)
         self.visualizer.draw_objective_point(self.modeling.player_position(), self.control)
+        self.visualizer.export_results(f"decision_making_simulator_results/{self.clock.time_in_seconds:.1f}.png")
         self.visualizer.reset()
 
         return True

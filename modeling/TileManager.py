@@ -19,6 +19,7 @@ class TileManager:
         self._x2_shift : int = 0
         self._MAX_QUEUE_SIZE : int = 5
         self.color_names_to_numbers : dict[str, int] = {}
+        self.detection_count : int = 0
         with open("perception/segmentation/classes.txt") as file:
             lines = file.readlines()
             for i, name in enumerate(lines):
@@ -126,6 +127,8 @@ class TileManager:
                     conv_j, conv_i = self._map_index_to_actual_index((coords[0]+j, coords[1]+i))
                     self.tiles[conv_j, conv_i, 1:] = self.tiles[conv_j, conv_i, :-1]
                     self.tiles[conv_j, conv_i, 0] = tile_id
+
+        self.detection_count += 1
 
     def add_tile(self, p : tuple[int, int], value : int):
         conv_p1, conv_p2 = self._map_index_to_actual_index(p)
