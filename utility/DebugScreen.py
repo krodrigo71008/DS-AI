@@ -35,8 +35,8 @@ class DebugScreen:
         self.window.grid_columnconfigure(1, weight=1)
         self.primary_action_label = ttk.Label(text="Primary action: -", font=("Arial", 30), wraplength=800, justify='center')
         self.primary_action_label.grid(row=0, column=0, pady=2)
-        self.secondary_action_label = ttk.Label(text="Secondary action: -", font=("Arial", 30), wraplength=800, justify='center')
-        self.secondary_action_label.grid(row=1, column=0, pady=2)
+        self.resources_request_label = ttk.Label(text="Secondary action: -", font=("Arial", 30), wraplength=800, justify='center')
+        self.resources_request_label.grid(row=1, column=0, pady=2)
         self.current_action_label = ttk.Label(text="Current action: -", font=("Arial", 30), wraplength=800, justify='center')
         self.current_action_label.grid(row=2, column=0, pady=2)
         self.key_label = ttk.Label(text="Key command: -", font=("Arial", 30), wraplength=800, justify='center')
@@ -111,18 +111,20 @@ class DebugScreen:
         if info is not None and info[0] == "control_info":
             _, q1, q2, q3 = info
             world_model_objects, fov_corners, player_info, tile_manager = q1
-            primary_action, secondary_action = q2
+            primary_action, resources_request = q2
             current_action, key_action, mouse_action = q3
             self.primary_action_label["text"] = "Primary action: " + str(primary_action)
-            if len(secondary_action) == 1:
-                self.secondary_action_label["text"] = f"Secondary action: {str(secondary_action[0])}"
+            if resources_request is None:
+                self.resources_request_label["text"] = "Resources request: None"
             else:
-                self.secondary_action_label["text"] = f"Secondary action: {str(secondary_action[0])}, {str(secondary_action[1])}"
+                self.resources_request_label["text"] = f"Resources request: {str(resources_request)}"
             self.key_label["text"] = "Key command: " + str(key_action)
             if mouse_action is None:
                 self.mouse_label["text"] = "Mouse command: " + str(mouse_action)
             else:
                 self.mouse_label["text"] = f"Mouse command: {str(mouse_action[0])}, {str(mouse_action[1])}"
+            if current_action is None:
+                self.current_action_label["text"] = "Current action: None"
             if current_action[0] == "go_to" or current_action[0] == "explore":
                 self.objective = current_action[1]
                 self.current_action_label["text"] = f"Current action: {str(current_action[0])}, {str(current_action[1])}"

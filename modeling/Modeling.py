@@ -8,6 +8,7 @@ import numpy as np
 
 from modeling.WorldModel import WorldModel, WorldModelTimer
 from modeling.PlayerModel import PlayerModel, PlayerModelTimer
+from modeling.CraftingModel import CraftingModel
 from modeling.ObjectsInfo import objects_info
 from modeling.Slam import Slam
 from modeling.constants import TILE_SIZE, PLAYER_BASE_SPEED
@@ -43,6 +44,7 @@ class Modeling:
 
         self.player_model = PlayerModel(self.clock)
         self.world_model = WorldModel(self, self.clock, debug)
+        self.crafting_model = CraftingModel()
 
         self.player_momentum : Point2d = None
         self.last_player_position : Point2d = None

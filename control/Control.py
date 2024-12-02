@@ -5,8 +5,9 @@ import time
 from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, HAND_INVENTORY_POSITION, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, CRAFT_KEYPRESS_DURATION
 from control.constants import PICK_UP_DURATION, PICK_UP_STOP_DURATION, PICK_UP_HOVER_DURATION, RUN_DURATION, FINISH_CRAFTING_DURATION, EXPLORE_DURATION
 from control.constants import STOP_DURATION
-from decisionMaking.DecisionMaking import DecisionMaking
-from decisionMaking.constants import PICK_UP_DISTANCE, CLOSE_ENOUGH_DISTANCE
+from control.constants import PICK_UP_DISTANCE, CLOSE_ENOUGH_DISTANCE
+from decisionMaking.BehaviorTrees import OceanExplorationBehaviorTree, CraftBehaviorTree, CollectSomethingBehaviorTree, ExecutionStatus
+from decisionMaking.DecisionMaking import DecisionMaking, ActionRequester
 from modeling.Modeling import Modeling
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.ObjectsInfo import objects_info
@@ -21,9 +22,6 @@ class Control:
         self.key_action = None
         self.mouse_action = None
         self.clock : Clock = clock
-        # whether the crafting menu is open
-        self.crafting_open = False
-        self.current_crafting_tab = 0
         self.crafting_tree_1 = {
             0: ["Axe", "Pickaxe", "Shovel", "Hammer", "Pitchfork", "Razor", "FeatherPencil"],
             1: ["Campfire", "FirePit", "Torch"],
@@ -38,362 +36,249 @@ class Control:
         for key, value in self.crafting_tree_1.items():
             for index, name in enumerate(value):
                 self.name_to_craft_position[name] = (key, index)
-        # list of items we should craft
-        self.items_to_craft = []
-        # for each crafting tab, in which position we are now
-        self.crafting_tabs_states = [0, 0, 0, 0, 0, 0]
-        # whether we are in the middle of an action
-        self.action_in_progress = False
-        # start time for the current action
-        self.start_time = None
+
+        self.action_requester = ActionRequester()
+        self.ocean_exploration_behavior_tree = OceanExplorationBehaviorTree()
+        self.crafting_behavior_tree = CraftBehaviorTree()
+        self.collect_something_tree = None # this gets created when we need it
+
         # which update should be done at the end of the current action
         self.update_at_end = None
         # current action
         self.current_action = None
-        # if this is true, we should not do current action (useful for crafting for now)
-        self.action_on_cooldown = False
+        self.current_payload = None
         # whether the debug part of this class should run
         self.debug : bool = debug
-        # there are some actions with multiple steps, so this indicates whether an action was finished
-        self.just_finished_action = False
-        # aux variable to help the picking up action
-        self.pick_up_state : str = None
-        # aux variable for the walking to objective phase in the picking up action
-        self.estimated_time_for_objective = None
-        # aux variable for the go_towards or go_precisely_towards action
+        # aux variable for the go_towards or go_towards action
         self.objective = None
         if self.debug:
             self.records = []
 
     def control(self, decision_making: DecisionMaking, modeling: Modeling):
         self.clock.update()
-        # secondary_action is (action, payload)
-        secondary_action = decision_making.secondary_action
-        should_continue = True
-        if self.action_in_progress:
-            # if this returns False, we should interrupt this iteration
-            if not self.continue_action(modeling):
-                should_continue = False
-        if should_continue:
-            self.action_on_cooldown = False
-            self.estimated_time_for_objective = None
-            self.objective = None
-            self.just_finished_action = False
-            # if the crafting tab is open and we don't want to craft anything right now, we should close it before anything else
-            if secondary_action[0] != "craft" and self.crafting_open:
-                self.key_action = (["caps_lock"], "press_and_release")
-                self.mouse_action = None
-                self.current_action = "close_inventory"
-                self.crafting_open = False
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
-            else:
-                if secondary_action[0] == "eat":
-                    # this is a one step action
-                    self.eat(secondary_action[1], modeling)
-                elif secondary_action[0] == "craft":
-                    # this is a multiple step action
-                    # one step is one key press
-                    self.craft(secondary_action[1])
-                elif secondary_action[0] == "go_to":
-                    # this is a multiple step process
-                    # one step is walking for a bit
-                    self.go_towards(secondary_action[1], modeling)
-                elif secondary_action[0] == "go_precisely_to":
-                    # this is a multiple step process
-                    # one step is walking for a bit
-                    self.go_precisely_towards(secondary_action[1], modeling)
-                elif secondary_action[0] == "run":
-                    # this is a multiple step process
-                    # one step is walking for a bit
-                    self.run(secondary_action[1], modeling)
-                elif secondary_action[0] == "explore":
-                    # this is a multiple step process
-                    # one step is walking for a bit
-                    self.explore(modeling)
-                elif secondary_action[0] == "pick_up_item":
-                    # this is a multiple step process
-                    # steps are: waiting, hovering, clicking
-                    self.pick_up(secondary_action[1], modeling)
-                elif secondary_action[0] == "equip":
-                    # this is a one step process
-                    self.equip(secondary_action[1], modeling)
-                elif secondary_action[0] == "unequip":
-                    # this is a one step process
-                    self.unequip(secondary_action[1])
-                elif secondary_action[0] == "stop":
-                    # this is a one step process
-                    self.stop()
-                else:
-                    raise ValueError("Invalid secondary action!")
-                self.current_action = secondary_action[0]
-                self.action_in_progress = True
-                self.start_time = self.clock.time()
-        if self.debug:
-            self.records.append(("normal_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
-                                 self.current_action, self.clock.time_in_seconds, self.update_at_end))
-            if self.current_action == "go_to" or self.current_action == "explore":
-                cur_action = (self.current_action, self.objective)
-            else:
-                cur_action = self.current_action
-            return (cur_action, self.key_action, self.mouse_action)
-
-    def continue_action(self, modeling: Modeling) -> bool:
-        """Continues an ongoing action and returns whether the rest of the control should run this iteration
-
-        :param modeling: Modeling instance
-        :type modeling: Modeling
-        :return: True if the rest of control should run, False if it should be interrupted
-        :rtype: bool
-        """
-        if self.current_action == "eat":
-            if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
-                self.action_in_progress = False
-        elif self.current_action == "craft":
-            self.action_on_cooldown = True
-            # if update_at_end is "craft", it is the final phase, after pressing enter 
-            if self.update_at_end is not None and self.update_at_end[0] == "craft":
-                if self.clock.time() - self.start_time >= FINISH_CRAFTING_DURATION:
-                    self.action_in_progress = False
-            else:
-                if self.clock.time() - self.start_time >= CRAFT_KEYPRESS_DURATION:
-                    self.action_in_progress = False
-        elif self.current_action == "go_to":
-            if self.clock.time() - self.start_time >= RUN_DURATION:
-                self.action_in_progress = False
-        elif self.current_action == "go_precisely_to":
-            if self.clock.time() - self.start_time >= RUN_DURATION:
-                self.action_in_progress = False
-        elif self.current_action == "run":
-            if self.clock.time() - self.start_time >= RUN_DURATION:
-                self.action_in_progress = False
-        elif self.current_action == "explore":
-            if self.clock.time() - self.start_time >= EXPLORE_DURATION:
-                self.action_in_progress = False
-        elif self.current_action == "pick_up_item":
-            # in this case, we're waiting a bit before hovering
-            if self.pick_up_state is None:
-                if self.clock.time() - self.start_time >= PICK_UP_STOP_DURATION:
-                    self.action_in_progress = False
-            # hovering over the object
-            elif self.pick_up_state == "hover":
-                if self.clock.time() - self.start_time >= PICK_UP_HOVER_DURATION:
-                    self.action_in_progress = False
-            # clicking and waiting until the action is finished
-            elif self.pick_up_state == "click":
-                self.action_on_cooldown = True
-                # in this case, estimated_time_for_objective is the estimated time to get to the object, after which the player will be still
-                if self.clock.time() - self.start_time >= self.estimated_time_for_objective:
-                    modeling.set_direction(None)
-                if self.clock.time() - self.start_time >= PICK_UP_DURATION:
-                    self.action_in_progress = False
-        elif self.current_action == "equip":
-            if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
-                self.action_in_progress = False
-        elif self.current_action == "unequip":
-            if self.clock.time() - self.start_time >= MOUSE_CLICK_DURATION:
-                self.action_in_progress = False
-        elif self.current_action == "close_inventory":
-            self.action_on_cooldown = True
-            if self.clock.time() - self.start_time >= CRAFT_KEYPRESS_DURATION:
-                self.action_in_progress = False
-        elif self.current_action == "stop":
-            if self.clock.time() - self.start_time >= STOP_DURATION:
-                self.action_in_progress = False
-
-        # each action has different signals for stopping, this will probably be changed someday
-        # if self.key_action is not None:
-        #     if self.key_action[1] == "press_and_release":
-        #         self.action_on_cooldown = True
-        #     if time.time_ns() - self.start_time >= KEYPRESS_DURATION:
-        #         self.action_in_progress = False
-        # if self.mouse_action is not None:
-        #     if time.time_ns() - self.start_time >= MOUSE_CLICK_DURATION:
-        #         self.action_in_progress = False
-        
-        if self.action_in_progress == False:
-            if self.update_at_end is not None:
-                return_value = None
-                if self.update_at_end[0] == "pick_up":
-                    # update_at_end[1] is the Modeling Object
-                    obj_name = self.update_at_end[1].name_str()
-                    # update the inventory depending on the collected object
-                    if obj_name == "BerryBush":
-                        modeling.player_model.inventory.add_item("Berries", 1)
-                        self.update_at_end[1].harvest()
-                    elif obj_name == "Grass":
-                        modeling.player_model.inventory.add_item("CutGrass", 1)
-                        self.update_at_end[1].harvest()
-                    elif obj_name == "Sapling":
-                        modeling.player_model.inventory.add_item("Twigs", 1)
-                        self.update_at_end[1].harvest()
-                    else:
-                        modeling.player_model.inventory.add_item(obj_name, 1)
-                    return_value = False
-                    self.pick_up_state = None
-                    self.just_finished_action = True
-                elif self.update_at_end[0] == "eat":
-                    # update player stats depending on what we ate
-                    food_stats = objects_info.get_item_info(info="food_stats", name=self.update_at_end[1])
-                    modeling.player_model.health += food_stats[0]
-                    modeling.player_model.hunger += food_stats[1]
-                    modeling.player_model.sanity += food_stats[2]
-                    return_value = False
-                    self.just_finished_action = True
-                elif self.update_at_end[0] == "equip":
-                    # update inventory accordingly
-                    modeling.player_model.inventory.equip_item(self.update_at_end[1])
-                    return_value = False
-                    self.just_finished_action = True
-                elif self.update_at_end[0] == "unequip":
-                    # update inventory accordingly
-                    modeling.player_model.inventory.unequip_slot(self.update_at_end[1])
-                    return_value = False
-                    self.just_finished_action = True
-                elif self.update_at_end[0] == "craft":
-                    # update inventory accordingly
-                    modeling.player_model.inventory.craft(self.update_at_end[1])
-                    return_value = False
-                    self.just_finished_action = True
-                elif self.update_at_end[0] == "change_pick_up_state":
-                    # change the internal pick up state
-                    change = self.update_at_end[1]
-                    self.pick_up_state = change
-                    return_value = True
-                elif self.update_at_end[0] == "change_inv_state":
-                    # change the internal inventory state
-                    change = self.update_at_end[1]
-                    if change == "up":
-                        self.current_crafting_tab -= 1
-                    elif change == "down":
-                        self.current_crafting_tab += 1
-                    elif change == "left":
-                        self.crafting_tabs_states[self.current_crafting_tab] -= 1
-                    elif change == "right":
-                        self.crafting_tabs_states[self.current_crafting_tab] += 1
-                    return_value = True
-                elif self.update_at_end[0] == "reset_player_direction":
-                    # reset player model direction
-                    modeling.set_direction(None)
-                    return_value = True
-                    self.just_finished_action = True
-                self.update_at_end = None
-
-                return return_value
-            return True
-
-        if self.debug:
-            self.records.append(("continue_path", self.key_action, self.mouse_action, self.action_on_cooldown, 
-                                 self.current_action, self.clock.time_in_seconds, self.update_at_end))
-
-        return False
-
-    def eat(self, food_name: str, modeling: Modeling):
-        # calculate where I should click
-        inv = modeling.player_model.inventory
-        slots_1 = [slot_num for slot_num in inv.get_inventory_slots()]
-        slots_2 = [slot.object.name if slot.object is not None else None for slot in inv.get_inventory_slots().values()]
-        for elem in zip(slots_1, slots_2):
-            # elem is (slot_number, slot_object_name)
-            if elem[1] is not None and elem[1] == food_name:
-                INV_SLOT_1_POS = Point2d(FIRST_INVENTORY_POSITION[0], FIRST_INVENTORY_POSITION[1])
-                INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
-                self.mouse_action = ("right_click", INV_SLOT_1_POS+INV_SLOT_DELTA*elem[0])
-                self.key_action = None
-                self.update_at_end = ("eat", food_name)
-                break
-
-
-    def equip(self, equip_name: str, modeling: Modeling):
-        # calculate where I should click
-        inv = modeling.player_model.inventory
-        slot_index = inv.find_first_slot(equip_name)
-        INV_SLOT_1_POS = Point2d(FIRST_INVENTORY_POSITION[0], FIRST_INVENTORY_POSITION[1])
-        INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
-        self.mouse_action = ("right_click", INV_SLOT_1_POS+INV_SLOT_DELTA*slot_index)
-        self.key_action = None
-        self.update_at_end = ("equip", equip_name)
-        
-    def unequip(self, equip_slot: str):
-        slot_name_to_number = {
-            "Hand": 0,
-            "Body": 1,
-            "Head": 2,
-        }
-        INV_SLOT_HAND_POS = Point2d(HAND_INVENTORY_POSITION[0], HAND_INVENTORY_POSITION[1])
-        INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
-        self.mouse_action = ("right_click", INV_SLOT_HAND_POS+INV_SLOT_DELTA*slot_name_to_number[equip_slot])
-        self.key_action = None
-        self.update_at_end = ("unequip", equip_slot)
-
-    def craft(self, things_to_craft: list[str]):
-        if not self.crafting_open:
-            self.key_action = (["caps_lock"], "press_and_release")
-            self.crafting_open = True
+        # primary_action is (action, payload)
+        primary_action = decision_making.primary_action
+        resources_request = decision_making.resources_request
+        if resources_request is not None and primary_action[0] in ["nothing", "explore", "run"]:
+            self.gather(modeling, resources_request)
         else:
-            # record what needs to be crafted (if needed)
-            if len(self.items_to_craft) == 0:
-                self.items_to_craft = things_to_craft
-            for item in self.items_to_craft:
-                wanted_position = self.name_to_craft_position[item]
-                # wasd controls are default on crafting menu
-                # updating the crafting state happens when the action is finished, not here
-                if wanted_position[0] < self.current_crafting_tab:
-                    self.key_action = (["w"], "press_and_release")
-                    self.update_at_end = ("change_inv_state", "up")
-                elif wanted_position[0] > self.current_crafting_tab:
-                    self.key_action = (["s"], "press_and_release")
-                    self.update_at_end = ("change_inv_state", "down")
+            if len(primary_action) == 1:
+                self.end_action_and_call(primary_action[0], modeling, None)
+            else:
+                self.end_action_and_call(primary_action[0], modeling, primary_action[1])
+
+        action = self.action_requester.get_action()
+        
+        if action is None or action[0] == "nothing":
+            self.key_action = None
+            self.mouse_action = None
+            return (action, self.key_action, self.mouse_action)
+        if action[0] == "go":
+            self.go_towards(action[1], modeling)
+        elif action[0] == "press_and_release":
+            self.key_action = (action[1], "press_and_release")
+            self.mouse_action = None
+        elif action[0] == "run":
+            keys = self.global_direction_to_key_commands(action[1])
+            self.key_action = (keys, "press")
+            self.mouse_action = None
+        elif action[0] == "eat":
+            # calculate where I should click
+            inv = modeling.player_model.inventory
+            slots_1 = [slot_num for slot_num in inv.get_inventory_slots()]
+            slots_2 = [slot.object.name if slot.object is not None else None for slot in inv.get_inventory_slots().values()]
+            for elem in zip(slots_1, slots_2):
+                # elem is (slot_number, slot_object_name)
+                if elem[1] is not None and elem[1] == action[1]:
+                    INV_SLOT_1_POS = Point2d(FIRST_INVENTORY_POSITION[0], FIRST_INVENTORY_POSITION[1])
+                    INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
+                    self.mouse_action = ("right_click", INV_SLOT_1_POS+INV_SLOT_DELTA*elem[0])
+                    self.key_action = None
+                    break
+            food_stats = objects_info.get_item_info(info="food_stats", name=action[1])
+            modeling.player_model.health += food_stats[0]
+            modeling.player_model.hunger += food_stats[1]
+            modeling.player_model.sanity += food_stats[2]
+        elif action[0] == "equip":
+            # calculate where I should click
+            inv = modeling.player_model.inventory
+            slot_index = inv.find_first_slot(action[1])
+            INV_SLOT_1_POS = Point2d(FIRST_INVENTORY_POSITION[0], FIRST_INVENTORY_POSITION[1])
+            INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
+            self.mouse_action = ("right_click", INV_SLOT_1_POS+INV_SLOT_DELTA*slot_index)
+            self.key_action = None
+            modeling.player_model.inventory.equip_item(action[1])
+        elif action[0] == "unequip":
+            slot_name_to_number = {
+                "Hand": 0,
+                "Body": 1,
+                "Head": 2,
+            }
+            INV_SLOT_HAND_POS = Point2d(HAND_INVENTORY_POSITION[0], HAND_INVENTORY_POSITION[1])
+            INV_SLOT_DELTA = Point2d(INVENTORY_SPACING[0], INVENTORY_SPACING[1])
+            self.mouse_action = ("right_click", INV_SLOT_HAND_POS+INV_SLOT_DELTA*slot_name_to_number[action[1]])
+            self.key_action = None
+            modeling.player_model.inventory.unequip_slot(action[1])
+        elif action[0] == "close_crafting_menu":
+            self.key_action = ("caps_lock", "press_and_release")
+            self.mouse_action = None
+            modeling.crafting_model.crafting_open = False
+
+        self.action_requester.set_action(None)
+
+        if self.debug:
+            return (action, self.key_action, self.mouse_action)
+
+    def end_action_and_call(self, function_ : str, modeling : Modeling, payload):
+        if self.current_action is not None and self.current_action != function_:
+            if self.current_action == "nothing":
+                pass
+            elif self.current_action == "gather":
+                if self.collect_something_tree is not None:
+                    running_leaf = self.collect_something_tree.get_running_leaf()
+                    if running_leaf is not None and running_leaf == "CollectSomething":
+                        # if we are collecting something, we need to finish collecting it
+                        self.gather(modeling, *self.current_payload)
+                        return
+            # we can always interrupt exploring with no consequences
+            elif self.current_action == "explore":
+                pass
+            elif self.current_action == "craft":
+                self.action_requester.set_action(("close_crafting_menu",))
+                self.current_action = "nothing"
+                return
+            elif self.current_action == "run":
+                pass
+            elif self.current_action == "equip":
+                pass
+            elif self.current_action == "eat":
+                pass
+
+        if function_ == "nothing":
+            self.do_nothing()
+        elif function_ == "gather":
+            self.gather(modeling, payload)
+        elif function_ == "explore":
+            self.explore(modeling, "ocean", payload)
+        elif function_ == "craft":
+            self.craft(modeling, payload)
+        elif function_ == "run":
+            self.run(modeling, payload)
+        elif function_ == "equip":
+            self.equip(payload)
+        elif function_ == "eat":
+            self.eat(payload)
+
+    @staticmethod
+    def get_closest_point(point_list: list[Point2d], player_position: Point2d):
+        closest_distance = None
+        closest_point = None
+        for point in point_list:
+            dist = point.distance(player_position)
+            if closest_distance is None or dist < closest_distance:
+                closest_distance = dist
+                closest_point = point
+        
+        return closest_point
+
+    def eat(self, food_name: str):
+        self.action_requester.set_action(("eat", food_name))
+        self.current_action = "eat"
+        self.current_payload = (food_name,)
+
+    def equip(self, equip_name: str):
+        self.action_requester.set_action(("equip", equip_name))
+        self.current_action = "equip"
+        self.current_payload = (equip_name,)
+        
+    def gather(self, modeling: Modeling, item_list : list[tuple[str, int]]) -> None:
+        """Gather items
+
+        :param modeling: modeling
+        :type modeling: Modeling
+        :param item_list: list with names of items to gather and their amount
+        :type item_list: list[tuple[str, int]]
+        """
+        if self.collect_something_tree is None:
+            items = []
+            for name, amount in item_list:
+                if name == "food":
+                    items.extend([("Berries", amount), ("Carrot", amount)])
                 else:
-                    if wanted_position[1] < self.crafting_tabs_states[self.current_crafting_tab]:
-                        self.key_action = (["a"], "press_and_release")
-                        self.update_at_end = ("change_inv_state", "left")
-                    elif wanted_position[1] > self.crafting_tabs_states[self.current_crafting_tab]:
-                        self.key_action = (["d"], "press_and_release")
-                        self.update_at_end = ("change_inv_state", "right")
-                    else:
-                        self.key_action = (["enter"], "press_and_release")
-                        self.update_at_end = ("craft", item)
-                        self.crafting_open = False
-        self.mouse_action = None
+                    items.append((name, amount))
+            
+            wanted_items = []
+            missing_resources = modeling.player_model.inventory.check_missing_resources_by_name(items)
+            for name, amount in missing_resources:
+                if amount > 0:
+                    wanted_items.append(name)
+
+            if len(wanted_items) == 0:
+                # this means all requests are satisfied
+                self.key_action = None
+                self.mouse_action = None
+                return
+
+            sources = []
+            for item in wanted_items:
+                sources.extend(objects_info.get_item_info("sources", name=item))
+            
+            sources.extend(wanted_items)
+
+            obj_lists = modeling.world_model.get_all_of(sources)
+            all_positions = []
+            for list_ in obj_lists.values():
+                all_positions.extend([obj.position() for obj in list_])
+            if len(all_positions) == 0:
+                self.explore(modeling, "resources", items)
+                return
+            else:
+                closest_object = self.get_closest_point(all_positions, modeling.player_position())
+                self.collect_something_tree = CollectSomethingBehaviorTree(closest_object)
+                modeling.world_model.set_pickup_object(closest_object)
+            
+        
+        if self.collect_something_tree.update(modeling, self.action_requester) == ExecutionStatus.SUCCESS:
+            if self.collect_something_tree.objective.yield_ is not None:
+                modeling.player_model.inventory.add_item(self.collect_something_tree.objective.yield_, 1)
+                modeling.world_model.handle_object_harvested(self.collect_something_tree.objective)
+            self.collect_something_tree = None
+            modeling.world_model.set_pickup_object(None)
+        
+        self.current_action = "gather"
+        self.current_payload = (item_list,)
+
+    def unequip(self, equip_slot: str):
+        self.action_requester.set_action(("unqeuip", equip_slot))
+
+    def craft(self, modeling: Modeling, item: str):
+        if modeling.player_model.inventory.can_craft(item):
+            modeling.crafting_model.next_craft = item
+            if self.crafting_behavior_tree.update(modeling, self.action_requester):
+                modeling.player_model.inventory.craft(modeling.crafting_model.next_craft)
+        else:
+            materials = objects_info.calculate_raw_resources([(item, 1)], info="name")
+            self.gather(modeling, materials, "main")
+            return
+        
+        self.current_action = "craft"
+        self.current_payload = (item,)
 
     def go_towards(self, objective: Point2d, modeling: Modeling):
         self.objective = objective
         player_position = modeling.player_position()
-        # PICK_UP_DISTANCE means that we should click it with mouse
-        if objective.distance(player_position) < PICK_UP_DISTANCE:
-            self.key_action = None
-            self.mouse_action = None
-            return
         # direction_to_move is in radians
         direction_to_move = (objective - player_position).angle()
         modeling.set_direction(round(direction_to_move/(pi/4))*pi/4)
         keys = self.global_direction_to_key_commands(direction_to_move)
         self.key_action = (keys, "press")
         self.mouse_action = None
-        self.update_at_end = ("reset_player_direction",)
 
-    def go_precisely_towards(self, objective: Point2d, modeling: Modeling):
-        self.objective = objective
-        player_position = modeling.player_position()
-        if objective.distance(player_position) < CLOSE_ENOUGH_DISTANCE:
-            self.key_action = None
-            self.mouse_action = None
-            return
-        # direction_to_move is in radians
-        direction_to_move = (objective - player_position).angle()
-        modeling.set_direction(round(direction_to_move/(pi/4))*pi/4)
-        keys = self.global_direction_to_key_commands(direction_to_move)
-        self.key_action = (keys, "press")
-        self.mouse_action = None
-        self.update_at_end = ("reset_player_direction",)
-
-    def run(self, direction_to_run : float, modeling : Modeling):
+    def run(self, modeling : Modeling, direction_to_run : float):
         modeling.set_direction(direction_to_run)
-        keys = self.global_direction_to_key_commands(direction_to_run)
-        self.key_action = (keys, "press")
-        self.mouse_action = None
-        self.update_at_end = ("reset_player_direction",)
+        self.action_requester.set_action(("run", direction_to_run))
+        self.current_action = "run"
+        self.current_payload = (direction_to_run,)
 
     @staticmethod
     def global_direction_to_key_commands(global_direction : float) -> list[str]:
@@ -433,43 +318,29 @@ class Control:
             raise Exception("Invalid discretized direction!")
         return keys
 
+    def do_nothing(self):
+        self.action_requester.set_action(("nothing",))
+        self.current_action = "nothing"
 
-    def explore(self, modeling : Modeling):
-        # reminder to somehow check that I'm not stuck somewhere
-        chunk = modeling.world_model.get_closest_unexplored_chunk()
-        # objective is the central point of the chunk
-        objective = Point2d(chunk[0]*CHUNK_SIZE + CHUNK_SIZE/2, chunk[1]*CHUNK_SIZE + CHUNK_SIZE/2)
-        self.go_towards(objective, modeling)
+    def explore(self, modeling : Modeling, type_ : str, resources : list = []):
+        if type_ == "ocean":
+            self.ocean_exploration_behavior_tree.update(modeling, self.action_requester)
+        elif type_ == "resources":
+            candidate_points_to_explore = []
+            for resource in resources:
+                # I could have some sort of logic in here to find out where I should explore for certain resources
+                chunk = modeling.world_model.get_closest_unexplored_chunk()
+                # objective is the central point of the chunk
+                objective = Point2d(chunk[0]*CHUNK_SIZE + CHUNK_SIZE/2, chunk[1]*CHUNK_SIZE + CHUNK_SIZE/2)
+                candidate_points_to_explore.append(objective)
 
-    def pick_up(self, obj : ObjectModel, modeling : Modeling):
-        if self.pick_up_state is None:
-            self.key_action = None
-            self.mouse_action = None
-            self.update_at_end = ("change_pick_up_state", "hover")
-        elif self.pick_up_state == "hover":
-            bbox = obj.latest_screen_position
-            self.key_action = None
-            self.mouse_action = ("move", Point2d.center_from_box(bbox))
-            self.update_at_end = ("change_pick_up_state", "click")
-            # send notice that we're hovering over obj
-            modeling.world_model.set_hovering_over(obj)
-        elif self.pick_up_state == "click":
-            bbox = obj.latest_screen_position
-            self.key_action = None
-            self.mouse_action = ("click", Point2d.center_from_box(bbox))
-            player_pos = modeling.player_position()
-            distance_to_object : Point2d = obj.position() - player_pos
-            modeling.set_direction(distance_to_object.angle())
-            self.update_at_end = ("pick_up", obj)
-            # this is the estimated time that we'll take to get to obj
-            self.estimated_time_for_objective = distance_to_object.distance(Point2d(0, 0))/PLAYER_BASE_SPEED
-            # send notice that we're no longer hovering over obj
-            modeling.world_model.set_hovering_over(None)
+            closest_object = self.get_closest_point(candidate_points_to_explore, modeling.player_position())
 
-    def stop(self):
-        self.key_action = None
-        self.mouse_action = None
-        self.update_at_end = None
+            self.action_requester.set_action(("go", closest_object))
+        
+        self.current_action = "explore"
+        self.current_payload = (type_, resources)
+
 
 class ControlTimer(Control):
     def __init__(self, debug=False, clock=Clock()):
@@ -512,12 +383,6 @@ class ControlTimer(Control):
         super().go_towards(objective, modeling)
         t2  = time.time_ns()
         self.time_records_list.append(("go_towards", t2-t1))
-    
-    def go_precisely_towards(self, objective: Point2d, modeling: Modeling):
-        t1 = time.time_ns()
-        super().go_precisely_towards(objective, modeling)
-        t2  = time.time_ns()
-        self.time_records_list.append(("go_precisely_towards", t2-t1))
     
     def run(self, direction_to_run: float, modeling: Modeling):
         t1 = time.time_ns()

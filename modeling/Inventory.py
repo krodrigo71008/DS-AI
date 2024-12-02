@@ -57,6 +57,30 @@ class Inventory:
                 counts.append(0)
         return counts
 
+    def get_inventory_count_by_id(self, object_ids: list[int]) -> list[int]:
+        """
+        Get how many of a certain item we have in our inventory
+        :param object_ids: list of object ids
+        :type object_ids: list[int]
+        :return: count of the requested objects
+        :rtype: list[int]
+        """
+        inv = {}
+        for slot in self.slots.values():
+            if slot.object is not None:
+                if slot.object.id in inv:
+                    inv[slot.object.id] += slot.count
+                else:
+                    inv[slot.object.id] = slot.count
+
+        counts = []
+        for obj_id in object_ids:
+            if obj_id in inv:
+                counts.append(inv[obj_id])
+            else:
+                counts.append(0)
+        return counts
+
     def _find_first_empty_slot(self) -> int:
         """Find first empty inventory slot among the 15 non equipment slots
 
@@ -408,6 +432,95 @@ class Inventory:
         :rtype: dict[int | str, InventorySlot]
         """
         return self.slots
+    
+    def check_sufficient_resources(self, obj_id_list : list[tuple[int, int]]) -> bool:
+        """Check if there is at least that many resources in the inventory
+
+        :param obj_id_list: list with tuples formatted as (obj_id, amount)
+        :type obj_id_list: list[tuple[int, int]]
+        :return: whether that many resources are in the inventory or not
+        :rtype: bool
+        """
+        ids = [obj_id for (obj_id, amount) in obj_id_list]
+        requested_amounts = [amount for (obj_id, amount) in obj_id_list]
+        inventory_amounts = self.get_inventory_count_by_id(ids)
+
+        for ra, ia in zip(requested_amounts, inventory_amounts):
+            if ra > ia:
+                return False
+            
+        return True
+    
+    def check_sufficient_resources_by_name(self, obj_name_list : list[tuple[str, int]]) -> bool:
+        """Check if there is at least that many resources in the inventory
+
+        :param obj_name_list: list with tuples formatted as (object name, amount)
+        :type obj_name_list: list[tuple[str, int]]
+        :return: whether that many resources are in the inventory or not
+        :rtype: bool
+        """
+        names = [name for (name, amount) in obj_name_list]
+        requested_amounts = [amount for (name, amount) in obj_name_list]
+        inventory_amounts = self.get_inventory_count(names)
+
+        for ra, ia in zip(requested_amounts, inventory_amounts):
+            if ra > ia:
+                return False
+            
+        return True
+    
+    def check_missing_resources(self, obj_id_list : list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """Check if there are missing resources in the inventory
+
+        :param obj_id_list: list with tuples formatted as (obj_id, amount)
+        :type obj_id_list: list[tuple[int, int]]
+        :return: list with missing resources
+        :rtype: list[tuple[int, int]]
+        """
+        ids = [obj_id for (obj_id, amount) in obj_id_list]
+        requested_amounts = [amount for (obj_id, amount) in obj_id_list]
+        inventory_amounts = self.get_inventory_count_by_id(ids)
+        results = []
+
+        for obj_id, ra, ia in zip(ids, requested_amounts, inventory_amounts):
+            v = ra - ia
+            if v < 0:
+                v = 0
+            results.append((obj_id, v))
+            
+        return results
+    
+    def check_missing_resources_by_name(self, obj_name_list : list[tuple[str, int]]) -> list[tuple[str, int]]:
+        """Check if there are missing resources in the inventory
+
+        :param obj_name_list: list with tuples formatted as (obj_id, amount)
+        :type obj_name_list: list[tuple[str, int]]
+        :return: list with missing resources
+        :rtype: list[tuple[str, int]]
+        """
+        names = [name for (name, amount) in obj_name_list]
+        requested_amounts = [amount for (name, amount) in obj_name_list]
+        inventory_amounts = self.get_inventory_count_by_id(names)
+        results = []
+
+        for name, ra, ia in zip(names, requested_amounts, inventory_amounts):
+            v = ra - ia
+            if v < 0:
+                v = 0
+            results.append((name, v))
+            
+        return results
+    
+    def check_if_food_about_to_spoil(self) -> list[int | str]:
+        slots = []
+        for slot_name, slot in self.slots.items():
+            if slot.object is not None and slot.object.spoilage is not None:
+                spoil_percentage = slot.object.spoilage.seconds()/slot.object.max_spoilage.seconds()
+                if spoil_percentage > 0.5 and spoil_percentage <= 0.6:
+                    slots.append(slot_name)
+
+        return slots
+
 
     def update(self, dt : float):
         """Update inventory

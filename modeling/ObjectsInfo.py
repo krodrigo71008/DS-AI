@@ -244,9 +244,43 @@ class ObjectsInfo:
             "Shovel": "Hand",
             "Hammer": "Hand",
             "Torch": "Hand",
+            "Backpack": "Body",
+        }
+        self._cookable_foods = [
+            "BatiliskWing", "Berries", "BlueCap", "Carrot", 
+            "CaveBanana", "Corn", "Dragonfruit", "Drumstick", 
+            "Durian", "Eel", "Egg", "Eggplant", "Fish", "FrogLegs",
+            "GreenCap", "KoalefantTrunk", "WinterKoalefantTrunk",
+            "LeafyMeat", "Meat", "MonsterMeat", "Morsel",
+            "Pomegranate", "Pumpkin", "RedCap", "Seeds", "TallbirdEgg"
+        ]
+        self._resource_to_sources = {
+            "Berries": ["BerryBush"],
+            "Carrot": ["CarrotPlanted"],
+            "CutGrass": ["Grass"],
+            "Twigs": ["Sapling"],
+            "Flint": ["NitreRock", "GoldRock"],
+            "Rocks": ["NitreRock", "GoldRock"],
+            "GoldNugget": ["GoldRock"],
+            "Wood": ["Evergreen", "LumpyEvergreen"],
+        }
+        self._biome_to_resources = {
+            "Savanna": ["Grass", "Beefalo", "SpiderNest"],
+            "Grasslands": ["Grass", "Sapling", "Flint", "Trees", "Pond"],
+            "Forest": ["Trees", "SpiderNest", "Sapling", "Pond"],
+            "Graveyard": ["GoldNugget", "Grave"],
+            "Marsh": ["Reeds", "Tentacle", "Merm", "Pond"],
+            "Mosaic": ["Rocks", "Flint", "GoldRock"],
+            "Rockyland": ["NitreRock", "GoldRock", "Tallbird"]
         }
         self._obj_id_to_crafting_recipe = {
-            31: [(32, 2), (33, 2)],
+            31: [(32, 2), (33, 2)], # grass, twigs
+            147: [(25, 4), (40, 4), (41, 1)], # rocks, logs, gold
+            148: [(151, 4), (152, 2), (41, 6)], # boards, cut stone, gold
+            149: [(32, 4), (33, 4)], # grass, twigs
+            150: [(32, 3)], # grass
+            151: [(40, 4)], # logs
+            152: [(25, 3)], # rocks
         }
 
     # get one of the attributes to image_id, name or obj_id, passing the current values (two of them are None)
@@ -346,8 +380,52 @@ class ObjectsInfo:
                 return self._item_table[self._item_table["name"] == name].object_type.iloc[0]
             if obj_id is not None:
                 return self._item_table[self._item_table["obj_id"] == obj_id].object_type.iloc[0]
+        if info == "sources":
+            name = self._get_attr("name", image_id, name, obj_id)
+            if name in self._resource_to_sources:
+                return self._resource_to_sources[name]
+            return None
 
         raise NotImplementedError("Not implemented!")
+    
+    def calculate_raw_resources(self, obj_list : list[tuple[str | int, int]], info : str) -> list[tuple[int, int]]:
+        """Calculates how many resources you need for the given object list, converting like rope to cut grass if necessary
+
+        :param obj_list: list with either object ids or names and their amount
+        :type obj_list: list[tuple[str | int, int]]
+        :param info: "obj_id" or "name"
+        :type info: str
+        :return: list with tuples formatted as (object id, amount)
+        :rtype: list[tuple[int, int]]
+        """
+
+        if info == "obj_id":
+            pass
+        elif info == "name":
+            obj_list = [(self._get_attr("obj_id", None, name, None), amount) for (name, amount) in obj_list]
+        else:
+            raise ValueError("Invalid info")
+        
+        materials = obj_list
+        i = 0
+        while i < len(materials):
+            if materials[i][0] in self._obj_id_to_crafting_recipe.keys():
+                recipe = self._obj_id_to_crafting_recipe[materials[i][0]]
+                materials.extend([(name, amount*materials[i][1]) for name, amount in recipe])
+                materials[i] = (materials[i][0], 0)
+            i += 1
+        
+        material_total = {}
+        for mat, amount in materials:
+            if amount == 0:
+                continue
+            if mat in material_total.keys():
+                material_total[mat] += amount
+            else:
+                material_total[mat] = amount
+
+        return list(material_total.items())
 
 
 objects_info = ObjectsInfo()
+

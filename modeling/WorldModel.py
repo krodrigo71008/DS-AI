@@ -15,6 +15,7 @@ from perception.constants import SCREEN_SIZE, SEGMENTATION_INPUT_SIZE
 from modeling.mobs.MobModel import MobModel
 from modeling.objects.ObjectModel import ObjectModel
 from modeling.objects.ObjectWithMultipleForms import ObjectWithMultipleForms
+from modeling.objects.PickableObjectModel import PickableObjectModel
 from modeling.Factory import factory
 from modeling.constants import DISTANCE_FOR_SAME_OBJECT, DISTANCE_FOR_SAME_MOB, CYCLES_TO_ADMIT_OBJECT, CYCLES_TO_ADMIT_MOB
 from modeling.constants import FOV, CAMERA_DISTANCE, CAMERA_PITCH, CAMERA_HEADING, CHUNK_SIZE, DISTANCE_FOR_VALID_PLAYER_POSITION
@@ -77,7 +78,7 @@ class WorldModel:
         self.recent_mobs : list[list[MobModel, int]] = []
         self.additions_to_recent_objects : list[list[ObjectModel, int]] = []
         self.additions_to_recent_mobs : list[list[MobModel, int]] = []
-        self.hovering_object : ObjectModel = None
+        self.pickup_object : ObjectModel = None
         self.tile_manager : TileManager = TileManager()
         self._THRESHOLD_FOR_EXPLORED : float = 0.7
         self.scheduler = Scheduler(self.clock, self)
@@ -93,7 +94,6 @@ class WorldModel:
         self.ocean_exploration_is_done : bool = False
         self.ocean_exploration_points_list : list[tuple[float, float]] = []
         self.MINIMUM_DISTANCE_TO_EXPLORATION_START = 6
-        self.CLOSE_DISTANCE_TO_EXPLORATION_POINT = 2
         self.EXPLORATION_PERIOD = 3
         self.EXPLORATION_ANGLE = -135 # this should mean that we explore the direction the camera is facing
         self.MAX_EXPLORATION_POINTS_LEN = 10
@@ -130,9 +130,9 @@ class WorldModel:
         :param obj: object obj
         :type obj: ObjectModel
         """
-        count = 0
-        for obj_chunk_list in self.objects_by_chunks.values():
-            count += len(obj_chunk_list)
+        # count = 0
+        # for obj_chunk_list in self.objects_by_chunks.values():
+        #     count += len(obj_chunk_list)
         # print(f"before objects_by_chunks deletion: {count}")
         chunk_index = self.point_to_chunk_index(obj.position())
         # if obj is in the chunk we expect it to be
@@ -141,9 +141,9 @@ class WorldModel:
         else:
             self.remove_object_from_chunk_lists(obj)
         
-        count = 0
-        for obj_chunk_list in self.objects_by_chunks.values():
-            count += len(obj_chunk_list)
+        # count = 0
+        # for obj_chunk_list in self.objects_by_chunks.values():
+        #     count += len(obj_chunk_list)
         # print(f"after objects_by_chunks deletion: {count}")
         
         # print(f"before object_lists deletion: {len(self.object_lists[obj.name_str()])}")
@@ -617,7 +617,7 @@ class WorldModel:
                                                         self.c3_deletion_border, 
                                                         self.c4_deletion_border], obj.position()):
                             # we shouldn't count down an object for deletion if we're hovering over it
-                            if obj != self.hovering_object:
+                            if obj != self.pickup_object:
                                 obj.countdown_cycles_to_be_deleted()
                                 if obj.get_cycles_to_be_deleted() == 0:
                                     self.remove_object(obj)
@@ -664,7 +664,7 @@ class WorldModel:
                                                     self.c3_deletion_border, 
                                                     self.c4_deletion_border], mob.position):
                         # we shouldn't count down an object for deletion if we're hovering over it
-                        if mob != self.hovering_object:
+                        if mob != self.pickup_object:
                             mob.countdown_cycles_to_be_deleted()
                             if mob.get_cycles_to_be_deleted() == 0:
                                 mob_name = mob.name_str()
@@ -742,8 +742,8 @@ class WorldModel:
         chunk_4 = self.point_to_chunk_index(Point2d(min_x1, max_x2))
         return [chunk_1, chunk_2, chunk_3, chunk_4]
 
-    def set_hovering_over(self, obj : ObjectModel):
-        self.hovering_object = obj
+    def set_pickup_object(self, obj : ObjectModel):
+        self.pickup_object = obj
 
     # returns dict of objects
     def get_all_of(self, obj_list : list[str], filter_ : str = None) -> dict[str, list[ObjectModel]]:
@@ -984,6 +984,12 @@ class WorldModel:
                             PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.sin(self.EXPLORATION_ANGLE*math.pi/180))
         self.next_exploration_point = self.modeling.player_position() + delta_pos
 
+    def has_seen_ocean(self) -> bool:
+        if self.ocean_exploration_start_point is None:
+            return self.check_for_ocean_around()
+        else:
+            return True
+
     def check_for_ocean_around(self) -> bool:
         # use openCV stuff for dilation of ocean, then get stuff at border
         x_min = min(self.c1.x1, self.c2.x1, self.c3.x1, self.c4.x1)
@@ -1009,24 +1015,6 @@ class WorldModel:
             return True
         
         return False
-
-
-    # def check_if_next_target_valid(self):
-    #     if (self.next_exploration_point is None or 
-    #         self.next_exploration_point.distance(self.modeling.player_position()) < self.CLOSE_DISTANCE_TO_EXPLORATION_POINT):
-    #         self.make_next_exploration_point()
-        
-    #     tile_index = (int(self.next_exploration_point.x1//TILE_SIZE), int(self.next_exploration_point.x2//TILE_SIZE))
-    #     tiles = self.tile_manager.get_tiles((tile_index[0]-2, tile_index[1]-2), (tile_index[0]+2, tile_index[1]+2))
-    #     # if there are unknown tiles, the objective is invalid
-    #     if tiles is None:
-    #         return False
-        
-    #     # if there are no ocean tiles, it is valid
-    #     elif not (tiles == self.tile_manager.color_names_to_numbers["ocean"]).any():
-    #         return True
-        
-    #     return False
     
     def search_for_valid_exploration_point(self) -> None:
         player_tile = (self.modeling.player_position().x1 // TILE_SIZE, self.modeling.player_position().x2 // TILE_SIZE)
@@ -1084,6 +1072,14 @@ class WorldModel:
             return True
         
         return False
+    
+    def handle_object_harvested(self, object_ : ObjectModel) -> None:
+        if type(object_) == PickableObjectModel:
+            # in this case, remove the object from the World model
+            self.remove_object(object_)
+        else:
+            # this should mean that it's on object with multiple forms
+            object_.harvest()
 
 
 class WorldModelTimer(WorldModel):

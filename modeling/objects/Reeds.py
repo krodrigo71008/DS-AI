@@ -20,10 +20,13 @@ class Reeds(ObjectWithMultipleForms):
                          slam_index_manager)
         if image_id == REEDS_HARVESTED:
             scheduler.schedule_change(GameTime(non_winter_days=3), "grow", self)
+            self.yield_ = None
+        else:
+            self.yield_ = "CutReeds"
 
     def update(self, change : str):
         if change == "grow":
-            self._state = REEDS_READY
+            self.set_state(REEDS_READY)
 
     def handle_object_detected(self, state) -> None:
         if state not in self.object_ids:
@@ -36,7 +39,7 @@ class Reeds(ObjectWithMultipleForms):
             self.set_state(REEDS_HARVESTED)
 
     def harvest(self):
-        self._state = REEDS_HARVESTED
+        self.set_state(REEDS_HARVESTED)
         self.scheduler.schedule_change(GameTime(non_winter_days=3), "grow", self)
 
     def is_harvested(self) -> bool:
@@ -46,5 +49,9 @@ class Reeds(ObjectWithMultipleForms):
         if state not in self.object_ids:
             raise Exception("Invalid id!")
         self._state = state
+        if state == REEDS_HARVESTED:
+            self.yield_ = None
+        else:
+            self.yield_ = "CutReeds"
 
 

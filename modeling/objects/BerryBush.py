@@ -20,10 +20,13 @@ class BerryBush(ObjectWithMultipleForms):
                          slam_index_manager)
         if image_id == BERRYBUSH_HARVESTED:
             scheduler.schedule_change(GameTime(non_winter_days=4.6875), "grow", self)
+            self.yield_ = None
+        else:
+            self.yield_ = "Berries"
 
     def update(self, change : str):
         if change == "grow":
-            self._state = BERRYBUSH_READY
+            self.set_state(BERRYBUSH_READY)
 
     def handle_object_detected(self, state):
         if state not in self.object_ids:
@@ -36,7 +39,7 @@ class BerryBush(ObjectWithMultipleForms):
             self.set_state(BERRYBUSH_HARVESTED)
 
     def harvest(self):
-        self._state = BERRYBUSH_HARVESTED
+        self.set_state(BERRYBUSH_HARVESTED)
         self.scheduler.schedule_change(GameTime(non_winter_days=4.6875), "grow", self)
 
     def is_harvested(self) -> bool:
@@ -46,5 +49,7 @@ class BerryBush(ObjectWithMultipleForms):
         if state not in self.object_ids:
             raise Exception("Invalid id!")
         self._state = state
-
-
+        if state == BERRYBUSH_HARVESTED:
+            self.yield_ = None
+        else:
+            self.yield_ = "Berries"

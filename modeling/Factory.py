@@ -25,8 +25,8 @@ if TYPE_CHECKING:
 
 class Factory:
     def __init__(self):
-        self.pickable_object_ids = [2, 6, [7,10], [15,19], 21, 22, [24,38], [40,42], 44, 46, [49,54], 57, 58, 60, [65,146]]
-        self.structure_ids = [3, 20, 39, 43, 45, 47, 56, 59, [62,64]]
+        self.pickable_object_ids = [2, 6, [7,10], [15,19], 21, 22, [24,38], [40,42], 44, 46, [49,54], 57, 58, 60, [65,146], [150,152]]
+        self.structure_ids = [3, 20, 39, 43, 45, 47, 56, 59, [62,64], 147, 148]
         aux = []
         for elem in self.pickable_object_ids:
             if type(elem) == list:

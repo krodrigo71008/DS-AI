@@ -31,7 +31,7 @@ class Scheduler:
     def schedule_change(self, time_from_now : GameTime, change : str, instance : ObjectModel):
         try:
             heapq.heappush(self.update_queue, (self.clock.time_from_now(time_from_now), time.time_ns(), change, instance))
-        except TypeError:
+        except TypeError: # temporary hack to make it so that there aren't two entries with the same timestamp
             time.sleep(0.01)
             heapq.heappush(self.update_queue, (self.clock.time_from_now(time_from_now), time.time_ns(), change, instance))
 

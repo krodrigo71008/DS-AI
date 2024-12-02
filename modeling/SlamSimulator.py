@@ -13,7 +13,7 @@ from modeling.WorldModel import WorldModelSlamMock
 from modeling.Slam import SlamTimer
 from modeling.constants import PLAYER_BASE_SPEED, CAMERA_HEADING
 from modeling.utility import image_to_local_position
-from decisionMaking.constants import CLOSE_ENOUGH_DISTANCE
+from control.constants import CLOSE_ENOUGH_DISTANCE
 from control.Control import Control
 from utility.utility import is_inside_convex_polygon, clamp2pi
 from utility.Point2d import Point2d

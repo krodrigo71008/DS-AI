@@ -14,9 +14,14 @@ class PickableObjectModel(ObjectWithSingleForm):
         super().__init__(modeling, slam_state_index, True, latest_screen_position, image_id, slam_index_manager)
         self.id = id_
         self.name = name
+        self.yield_ = name
+        self.collected = False
 
     def update(self, change : str):
         pass
 
     def name_str(self) -> str:
         return self.name
+    
+    def collect(self) -> None:
+        self.collected = True

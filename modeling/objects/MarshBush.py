@@ -20,10 +20,14 @@ class MarshBush(ObjectWithMultipleForms):
                          slam_index_manager)
         if image_id == MARSH_BUSH_HARVESTED:
             scheduler.schedule_change(GameTime(days=4), "grow", self)
+            self.yield_ = None
+        else:
+            self.yield_ = "Twigs"
+        self.damage_value = 3
 
     def update(self, change : str):
         if change == "grow":
-            self._state = MARSH_BUSH_READY
+            self.set_state(MARSH_BUSH_READY)
 
     def handle_object_detected(self, state) -> None:
         if state not in self.object_ids:
@@ -36,7 +40,7 @@ class MarshBush(ObjectWithMultipleForms):
             self.set_state(MARSH_BUSH_HARVESTED)
 
     def harvest(self):
-        self._state = MARSH_BUSH_HARVESTED
+        self.set_state(MARSH_BUSH_HARVESTED)
         self.scheduler.schedule_change(GameTime(days=4), "grow", self)
 
     def is_harvested(self) -> bool:
@@ -46,5 +50,9 @@ class MarshBush(ObjectWithMultipleForms):
         if state not in self.object_ids:
             raise Exception("Invalid id!")
         self._state = state
+        if state == MARSH_BUSH_HARVESTED:
+            self.yield_ = None
+        else:
+            self.yield_ = "Twigs"
 
 

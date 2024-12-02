@@ -21,5 +21,6 @@ class InventoryObject:
         self.stack_size = objects_info.get_item_info(info="stack_size", obj_id=self.id)
         # spoilage
         self.spoilage : GameTime = objects_info.get_item_info(info="spoil_time", obj_id=self.id)
+        self.max_spoilage : GameTime = objects_info.get_item_info(info="spoil_time", obj_id=self.id)
         self.uses_left = objects_info.get_item_info(info="max_uses", obj_id=self.id)
         self.time_left = objects_info.get_item_info(info="use_time", obj_id=self.id)
