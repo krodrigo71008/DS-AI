@@ -119,7 +119,7 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
                 action.act(control)
                 break
         decision_making.secondary_action = ("run", directions[direction_index])
-        q2 = (decision_making.primary_action, decision_making.secondary_action)
+        q2 = (decision_making.primary_decision, decision_making.secondary_action)
         q3 = control.control(decision_making, modeling)
         t4 = time.time_ns()
         action.act(control)

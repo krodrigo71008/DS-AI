@@ -33,7 +33,7 @@ def control_main_recorder(detected_objects_queue: Queue, segmentation_queue: Que
         q1 = modeling.update_model(detected_objects_queue, segmentation_queue)
         q2 = decision_making.decide(modeling)
         decision_making.secondary_action = ("go_precisely_to", trajectory[i])
-        q2 = (decision_making.primary_action, decision_making.secondary_action)
+        q2 = (decision_making.primary_decision, decision_making.secondary_action)
         q3 = control.control(decision_making, modeling)
         if control.key_action is None:
             if idle_start is None:

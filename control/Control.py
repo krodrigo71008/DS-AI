@@ -2,11 +2,10 @@ import math
 from math import pi
 import time
 
-from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, HAND_INVENTORY_POSITION, KEYPRESS_DURATION, MOUSE_CLICK_DURATION, CRAFT_KEYPRESS_DURATION
-from control.constants import PICK_UP_DURATION, PICK_UP_STOP_DURATION, PICK_UP_HOVER_DURATION, RUN_DURATION, FINISH_CRAFTING_DURATION, EXPLORE_DURATION
-from control.constants import STOP_DURATION
-from control.constants import PICK_UP_DISTANCE, CLOSE_ENOUGH_DISTANCE
-from decisionMaking.BehaviorTrees import OceanExplorationBehaviorTree, CraftBehaviorTree, CollectSomethingBehaviorTree, ExecutionStatus
+from control.constants import FIRST_INVENTORY_POSITION, INVENTORY_SPACING, HAND_INVENTORY_POSITION
+from control.constants import RESOURCE_GATHERING_DISTANCE
+from decisionMaking.BehaviorTrees import OceanExplorationBehaviorTree, CraftBehaviorTree, CollectSomethingBehaviorTree
+from decisionMaking.BehaviorTrees import RotateCameraBehaviorTree, ExecutionStatus
 from decisionMaking.DecisionMaking import DecisionMaking, ActionRequester
 from modeling.Modeling import Modeling
 from modeling.objects.ObjectModel import ObjectModel
@@ -41,15 +40,21 @@ class Control:
         self.ocean_exploration_behavior_tree = OceanExplorationBehaviorTree()
         self.crafting_behavior_tree = CraftBehaviorTree()
         self.collect_something_tree = None # this gets created when we need it
+        self.rotate_camera_tree = None
 
         # which update should be done at the end of the current action
         self.update_at_end = None
-        # current action
+        # last decision from decision making
+        self.current_decision = None
+        # last action that Control was doing
         self.current_action = None
         self.current_payload = None
+
+        # this is set when we need to choose a primary action again
+        self.repeat_choose_primary_action = False
         # whether the debug part of this class should run
         self.debug : bool = debug
-        # aux variable for the go_towards or go_towards action
+        # aux variable for the request_go or request_go action
         self.objective = None
         if self.debug:
             self.records = []
@@ -57,29 +62,28 @@ class Control:
     def control(self, decision_making: DecisionMaking, modeling: Modeling):
         self.clock.update()
         # primary_action is (action, payload)
-        primary_action = decision_making.primary_action
+        primary_decision = decision_making.primary_decision
         resources_request = decision_making.resources_request
-        if resources_request is not None and primary_action[0] in ["nothing", "explore", "run"]:
-            self.gather(modeling, resources_request)
-        else:
-            if len(primary_action) == 1:
-                self.end_action_and_call(primary_action[0], modeling, None)
-            else:
-                self.end_action_and_call(primary_action[0], modeling, primary_action[1])
+        if resources_request is not None and primary_decision[0] in ["nothing", "explore", "run"]:
+            positions, wanted_items = self.get_item_positions_and_wanted_items_from_item_request(resources_request, modeling)
+            if (len(positions) > 0 and 
+                    self.get_closest_point(positions, modeling.player_position())
+                    .distance(modeling.player_position()) < RESOURCE_GATHERING_DISTANCE):
+                primary_decision = ("gather", wanted_items)
+        
+        self.end_current_and_execute_new_decision(primary_decision, modeling)
 
         action = self.action_requester.get_action()
         
         if action is None or action[0] == "nothing":
             self.key_action = None
             self.mouse_action = None
-            return (action, self.key_action, self.mouse_action)
-        if action[0] == "go":
-            self.go_towards(action[1], modeling)
-        elif action[0] == "press_and_release":
+            return (action, self.objective, self.key_action, self.mouse_action)
+        if action[0] == "press_and_release":
             self.key_action = (action[1], "press_and_release")
             self.mouse_action = None
         elif action[0] == "run":
-            keys = self.global_direction_to_key_commands(action[1])
+            keys = self.global_direction_to_key_commands(action[1], modeling)
             self.key_action = (keys, "press")
             self.mouse_action = None
         elif action[0] == "eat":
@@ -120,17 +124,46 @@ class Control:
             self.key_action = None
             modeling.player_model.inventory.unequip_slot(action[1])
         elif action[0] == "close_crafting_menu":
-            self.key_action = ("caps_lock", "press_and_release")
+            self.key_action = (["caps_lock"], "press_and_release")
             self.mouse_action = None
             modeling.crafting_model.crafting_open = False
 
         self.action_requester.set_action(None)
 
         if self.debug:
-            return (action, self.key_action, self.mouse_action)
+            return (action, self.objective, self.key_action, self.mouse_action)
 
-    def end_action_and_call(self, function_ : str, modeling : Modeling, payload):
-        if self.current_action is not None and self.current_action != function_:
+    def get_item_positions_and_wanted_items_from_item_request(self, item_list : list[tuple[str, int]], modeling : Modeling):
+        items = []
+        for name, amount in item_list:
+            if name == "food":
+                items.extend([("Berries", amount), ("Carrot", amount)])
+            else:
+                items.append((name, amount))
+        
+        wanted_items = []
+        missing_resources = modeling.player_model.inventory.check_missing_resources_by_name(items)
+        for name, amount in missing_resources:
+            if amount > 0:
+                wanted_items.append(name)
+        
+        sources = []
+        for item in wanted_items:
+            sources.extend(objects_info.get_item_info("sources", name=item))
+        
+        sources.extend(wanted_items)
+
+        obj_lists = modeling.world_model.get_all_of(sources)
+        all_positions = []
+        for list_ in obj_lists.values():
+            all_positions.extend([obj.position() for obj in list_])
+
+        return all_positions, wanted_items
+
+    def end_current_and_execute_new_decision(self, primary_decision : tuple[str, None], modeling : Modeling):
+        decision, payload = primary_decision
+        if self.current_decision is not None and self.current_decision != decision:
+            print(self.current_decision, " -> ", decision)
             if self.current_action == "nothing":
                 pass
             elif self.current_action == "gather":
@@ -140,6 +173,7 @@ class Control:
                         # if we are collecting something, we need to finish collecting it
                         self.gather(modeling, *self.current_payload)
                         return
+                self.objective = None
             # we can always interrupt exploring with no consequences
             elif self.current_action == "explore":
                 pass
@@ -148,26 +182,45 @@ class Control:
                 self.current_action = "nothing"
                 return
             elif self.current_action == "run":
-                pass
+                modeling.set_direction(None)
+                self.objective = None
             elif self.current_action == "equip":
                 pass
             elif self.current_action == "eat":
                 pass
+            elif self.current_action == "finished_gather":
+                pass
+            elif self.current_action == "rotate":
+                if self.rotate_camera_tree.update(modeling, self.action_requester) != ExecutionStatus.SUCCESS:
+                    return
+                else:
+                    self.rotate_camera_tree = None
 
-        if function_ == "nothing":
-            self.do_nothing()
-        elif function_ == "gather":
-            self.gather(modeling, payload)
-        elif function_ == "explore":
-            self.explore(modeling, "ocean", payload)
-        elif function_ == "craft":
-            self.craft(modeling, payload)
-        elif function_ == "run":
-            self.run(modeling, payload)
-        elif function_ == "equip":
-            self.equip(payload)
-        elif function_ == "eat":
-            self.eat(payload)
+        self.current_decision = decision
+
+        self.repeat_choose_primary_action = True
+        while self.repeat_choose_primary_action:
+            self.repeat_choose_primary_action = False
+            if decision == "nothing":
+                self.do_nothing()
+            elif decision == "gather":
+                self.gather(modeling, payload)
+            elif decision == "explore":
+                self.explore(modeling, "ocean", payload)
+            elif decision == "craft":
+                self.craft(modeling, payload)
+            elif decision == "run":
+                self.run(modeling, payload)
+            elif decision == "equip":
+                self.equip(payload)
+            elif decision == "eat":
+                self.eat(payload)
+            elif decision == "request_go":
+                self.request_go(self.action_requester.get_action()[1], modeling)
+
+            if self.action_requester.get_action() is not None and self.action_requester.get_action()[0] == "request_go":
+                self.repeat_choose_primary_action = True
+                decision = "request_go"
 
     @staticmethod
     def get_closest_point(point_list: list[Point2d], player_position: Point2d):
@@ -191,7 +244,7 @@ class Control:
         self.current_action = "equip"
         self.current_payload = (equip_name,)
         
-    def gather(self, modeling: Modeling, item_list : list[tuple[str, int]]) -> None:
+    def gather(self, modeling: Modeling, item_list : list[tuple[str, int]], ) -> None:
         """Gather items
 
         :param modeling: modeling
@@ -200,41 +253,20 @@ class Control:
         :type item_list: list[tuple[str, int]]
         """
         if self.collect_something_tree is None:
-            items = []
-            for name, amount in item_list:
-                if name == "food":
-                    items.extend([("Berries", amount), ("Carrot", amount)])
-                else:
-                    items.append((name, amount))
-            
-            wanted_items = []
-            missing_resources = modeling.player_model.inventory.check_missing_resources_by_name(items)
-            for name, amount in missing_resources:
-                if amount > 0:
-                    wanted_items.append(name)
-
+            positions, wanted_items = self.get_item_positions_and_wanted_items_from_item_request(item_list, modeling)
             if len(wanted_items) == 0:
                 # this means all requests are satisfied
-                self.key_action = None
-                self.mouse_action = None
+                self.action_requester.set_action(("nothing",))
+                self.current_action = "finished_gather"
                 return
 
-            sources = []
-            for item in wanted_items:
-                sources.extend(objects_info.get_item_info("sources", name=item))
-            
-            sources.extend(wanted_items)
-
-            obj_lists = modeling.world_model.get_all_of(sources)
-            all_positions = []
-            for list_ in obj_lists.values():
-                all_positions.extend([obj.position() for obj in list_])
-            if len(all_positions) == 0:
-                self.explore(modeling, "resources", items)
+            if len(positions) == 0:
+                self.explore(modeling, "resources", wanted_items)
                 return
             else:
-                closest_object = self.get_closest_point(all_positions, modeling.player_position())
+                closest_object = self.get_closest_point(positions, modeling.player_position())
                 self.collect_something_tree = CollectSomethingBehaviorTree(closest_object)
+                self.objective = closest_object
                 modeling.world_model.set_pickup_object(closest_object)
             
         
@@ -256,6 +288,7 @@ class Control:
             modeling.crafting_model.next_craft = item
             if self.crafting_behavior_tree.update(modeling, self.action_requester):
                 modeling.player_model.inventory.craft(modeling.crafting_model.next_craft)
+                self.crafting_behavior_tree = CraftBehaviorTree()
         else:
             materials = objects_info.calculate_raw_resources([(item, 1)], info="name")
             self.gather(modeling, materials, "main")
@@ -264,15 +297,27 @@ class Control:
         self.current_action = "craft"
         self.current_payload = (item,)
 
-    def go_towards(self, objective: Point2d, modeling: Modeling):
+    def request_go(self, objective: Point2d, modeling: Modeling):
+        # I need to set the action to None here cause the action requester had the "request_go" action
+        self.action_requester.set_action(None)
         self.objective = objective
         player_position = modeling.player_position()
         # direction_to_move is in radians
         direction_to_move = (objective - player_position).angle()
-        modeling.set_direction(round(direction_to_move/(pi/4))*pi/4)
-        keys = self.global_direction_to_key_commands(direction_to_move)
-        self.key_action = (keys, "press")
-        self.mouse_action = None
+        angle_difference = clamp2pi(modeling.world_model.heading/180*math.pi - direction_to_move)
+        if (angle_difference <= math.pi/2 and angle_difference >= -math.pi/2) or self.rotate_camera_tree is not None:
+            modeling.set_direction(None)
+            if self.rotate_camera_tree is None:
+                self.rotate_camera_tree = RotateCameraBehaviorTree(direction_to_move)
+            if self.rotate_camera_tree.update(modeling, self.action_requester) == ExecutionStatus.SUCCESS:
+                self.rotate_camera_tree = None
+            self.current_action = "rotate"
+        else:
+            direction_to_move = round(direction_to_move/(pi/4))*pi/4
+            modeling.set_direction(direction_to_move)
+            self.action_requester.set_action(("run", direction_to_move))
+            self.current_action = "run"
+            self.current_payload = (direction_to_move,)
 
     def run(self, modeling : Modeling, direction_to_run : float):
         modeling.set_direction(direction_to_run)
@@ -281,9 +326,9 @@ class Control:
         self.current_payload = (direction_to_run,)
 
     @staticmethod
-    def global_direction_to_key_commands(global_direction : float) -> list[str]:
+    def global_direction_to_key_commands(global_direction : float, modeling : Modeling) -> list[str]:
         # correcting to account for camera heading
-        direction_to_move_from_camera = clamp2pi(global_direction - CAMERA_HEADING*pi/180)
+        direction_to_move_from_camera = clamp2pi(global_direction - modeling.world_model.heading*pi/180)
         # discretized_direction between -4 and 4, 0 aligned with camera direction and increasing counterclockwise
         discretized_direction = round(direction_to_move_from_camera/(pi/4))
         if discretized_direction == -4:
@@ -336,7 +381,7 @@ class Control:
 
             closest_object = self.get_closest_point(candidate_points_to_explore, modeling.player_position())
 
-            self.action_requester.set_action(("go", closest_object))
+            self.action_requester.set_action(("request_go", closest_object))
         
         self.current_action = "explore"
         self.current_payload = (type_, resources)
@@ -378,11 +423,11 @@ class ControlTimer(Control):
         t2  = time.time_ns()
         self.time_records_list.append(("craft", t2-t1))
     
-    def go_towards(self, objective: Point2d, modeling: Modeling):
+    def request_go(self, objective: Point2d, modeling: Modeling):
         t1 = time.time_ns()
-        super().go_towards(objective, modeling)
+        super().request_go(objective, modeling)
         t2  = time.time_ns()
-        self.time_records_list.append(("go_towards", t2-t1))
+        self.time_records_list.append(("request_go", t2-t1))
     
     def run(self, direction_to_run: float, modeling: Modeling):
         t1 = time.time_ns()

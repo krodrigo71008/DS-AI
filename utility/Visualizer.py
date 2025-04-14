@@ -295,10 +295,10 @@ class Visualizer:
 
     def write_decision_making_control(self, decision_making : DecisionMaking, control : Control):
         self.draw.text(((self.yolo_border[0]+self.yolo_border[2])//2, (self.yolo_border[1]+self.yolo_border[3])//2 - 75),
-                       f"Primary action: {self.textify(decision_making.primary_action)}", 
+                       f"Primary action: {self.textify(decision_making.primary_decision)}", 
                        fill="black", font=self.font, anchor="mm")
         self.draw.text(((self.yolo_border[0]+self.yolo_border[2])//2, (self.yolo_border[1]+self.yolo_border[3])//2 - 25),
-                       f"Secondary action: {self.textify(decision_making.secondary_action)}", 
+                       f"Secondary action: {self.textify(decision_making.resources_request)}", 
                        fill="black", font=self.font, anchor="mm")
         self.draw.text(((self.yolo_border[0]+self.yolo_border[2])//2, (self.yolo_border[1]+self.yolo_border[3])//2 + 75),
                        f"Current action: {self.textify(control.current_action)}", 

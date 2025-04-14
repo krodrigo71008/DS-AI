@@ -86,17 +86,18 @@ class WorldModel:
         self.segmentation_timestamp : float = None
         self.debug = debug
         self.latest_debug_image : Image.Image = None
+        self.heading = CAMERA_HEADING
 
         self.next_exploration_point : Point2d = None
-        self._latest_x_candidates = None
-        self._latest_y_candidates = None
+        self._latest_x1_candidates = None
+        self._latest_x2_candidates = None
         self.ocean_exploration_start_point : Point2d = None
         self.ocean_exploration_is_done : bool = False
         self.ocean_exploration_points_list : list[tuple[float, float]] = []
         self.MINIMUM_DISTANCE_TO_EXPLORATION_START = 6
         self.EXPLORATION_PERIOD = 3
-        self.EXPLORATION_ANGLE = -135 # this should mean that we explore the direction the camera is facing
         self.MAX_EXPLORATION_POINTS_LEN = 10
+        self.OCEAN_NEARBY_TILE_RANGE = 5
 
     @staticmethod
     def coords_to_chunk_coords(p : Point2d) -> Point2d:
@@ -123,6 +124,18 @@ class WorldModel:
         :rtype: tuple[int, int]
         """
         return Point2d(i // (CHUNK_SIZE // TILE_SIZE), j // (CHUNK_SIZE // TILE_SIZE))
+
+    def turn_camera_left_q(self):
+        print("wow")
+        self.heading -= 45
+        if self.heading < 0:
+            self.heading += 360
+
+    def turn_camera_right_e(self):
+        print("hey")
+        self.heading += 45
+        if self.heading >= 360:
+            self.heading -= 360
 
     def remove_object(self, obj : ObjectModel) -> None:
         """Remove object from world model
@@ -174,19 +187,18 @@ class WorldModel:
         heading = heading*math.pi/180
         pitch = pitch*math.pi/180
         matrix = np.array([
-            [(-f*math.sin(heading)-cx*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
-             (f*math.cos(heading)-cx*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
+            [(-f*math.cos(heading)-cx*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
+             (f*math.sin(heading)-cx*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
              (cx*distance+cx*FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"]],
 
-            [(f*math.sin(pitch)*math.cos(heading)-cy*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
-             (f*math.sin(pitch)*math.sin(heading)-cy*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
+            [(f*math.sin(pitch)*math.sin(heading)-cy*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
+             (f*math.sin(pitch)*math.cos(heading)-cy*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
              (f*FOLLOW_HEIGHT*math.cos(pitch)+cy*distance+cy*FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"]],
 
-            [-math.cos(pitch)*math.cos(heading),
-             -math.cos(pitch)*math.sin(heading),
+            [-math.cos(pitch)*math.sin(heading),
+             -math.cos(pitch)*math.cos(heading),
              distance+FOLLOW_HEIGHT*math.sin(pitch)],
         ])
-        
         matrix = np.linalg.inv(matrix)
         # matrix[0, :] = matrix[0, :]*(SEGMENTATION_INPUT_SIZE[0]/52.731)
         # matrix[1, :] = matrix[1, :]*(SEGMENTATION_INPUT_SIZE[1]/52.731)
@@ -228,7 +240,7 @@ class WorldModel:
         :type past_player_position: Point2d
         """
         # in openCV, x is right and y is down, but for us x1 is down and x2 is right, so they are inverted
-        warped_image, x_range, y_range = self.warp_image_to_ground(image, CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+        warped_image, x_range, y_range = self.warp_image_to_ground(image, self.heading, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
         player_pos = past_player_position
         x_min = x_range[0] + player_pos.x2
         x_max = x_range[1] + player_pos.x2
@@ -260,8 +272,8 @@ class WorldModel:
         tile1 = (chunk_index[0]*(CHUNK_SIZE//TILE_SIZE), chunk_index[1]*(CHUNK_SIZE//TILE_SIZE))
         tile2 = ((chunk_index[0]+1)*(CHUNK_SIZE//TILE_SIZE) - 1, (chunk_index[1]+1)*(CHUNK_SIZE//TILE_SIZE) - 1)
         chunk_tiles = self.tile_manager.get_tiles(tile1, tile2)
-        # chunk_tiles being None also means that the chunk wasn't fully explored
-        if chunk_tiles is not None and np.sum(chunk_tiles != 0) >= self._THRESHOLD_FOR_EXPLORED:
+        # chunk_tiles having -1 means that the chunk wasn't fully explored
+        if np.sum(chunk_tiles > 0) >= self._THRESHOLD_FOR_EXPLORED:
             self.explored_chunks.add(chunk_index)
         
         if self.debug:
@@ -277,8 +289,8 @@ class WorldModel:
             # debug_image_out = output_path / f"{start}.png"
             # raw_image_out = output_path / f"{start}_raw.png"
 
-            new_width = SEGMENTATION_INPUT_SIZE[0] + len(y_lines)
-            new_height = SEGMENTATION_INPUT_SIZE[1] + len(x_lines)
+            new_width = SEGMENTATION_INPUT_SIZE[0] + len(x_lines)
+            new_height = SEGMENTATION_INPUT_SIZE[1] + len(y_lines)
             color_dict = get_color_representation_dict()
             debug_image_arr = np.zeros((new_width, new_height), dtype=np.uint8)
 
@@ -295,7 +307,7 @@ class WorldModel:
                     y1 = y_lines[j]
                     y2 = y_lines[j+1]
                     cur_chunk = warped_image[x1:x2, y1:y2]
-                    debug_image_arr[x1+i+1:x2+i+1, y1+j+1:y2+j+1] = cur_chunk
+                    debug_image_arr[x1+i+1:x2+i+1, y1+j+1:y2+j+1] = cur_chunk # TODO: WRONG SHAPE SOMEHOW
             
             for i, x_line in enumerate(x_lines):
                 debug_image_arr[x_line+i, :] = 255 # border color
@@ -402,7 +414,7 @@ class WorldModel:
         :return: list of object screen positions, list of object xy coordinates and list of image_objs
         :rtype: tuple[list[float], list[float], list[ImageObject]]
         """
-        self.start_cycle(past_player_position)
+        self.start_cycle(past_player_position, heading=self.heading)
         detections = []
         converted_detections = []
         image_objs = []
@@ -449,6 +461,7 @@ class WorldModel:
             self.origin_coordinates = past_player_position - pos
         # corners of the trapezoid that we are seeing
         self.c1 = self.local_to_global_position(Point2d(0, 0), heading, pitch, distance, fov, follow_height)
+        print("c1", self.c1, "heading", heading, self.clock.time())
         self.c2 = self.local_to_global_position(Point2d(0, SCREEN_SIZE["height"]), heading, pitch, distance, fov, follow_height)
         self.c3 = self.local_to_global_position(Point2d(SCREEN_SIZE["width"], SCREEN_SIZE["height"]), heading, pitch, distance, fov, follow_height)
         self.c4 = self.local_to_global_position(Point2d(SCREEN_SIZE["width"], 0), heading, pitch, distance, fov, follow_height)
@@ -510,7 +523,7 @@ class WorldModel:
         # anchor points are usually at the bottom (y) and middle (x)
         pos = self.local_to_global_position(
             Point2d.bottom_from_box(image_obj.box),
-            CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV, FOLLOW_HEIGHT)
+            self.heading, CAMERA_PITCH, CAMERA_DISTANCE, FOV, FOLLOW_HEIGHT)
         
         return pos
 
@@ -534,7 +547,7 @@ class WorldModel:
         # anchor points are usually at the bottom (y) and middle (x)
         pos = self.local_to_global_position(
             Point2d.bottom_from_box(image_obj.box),
-            CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV, FOLLOW_HEIGHT)
+            self.heading, CAMERA_PITCH, CAMERA_DISTANCE, FOV, FOLLOW_HEIGHT)
         self.handle_mob_at_position(image_obj, pos)
     
 
@@ -980,8 +993,11 @@ class WorldModel:
         ])
     
     def make_next_exploration_point(self) -> None:
-        delta_pos = Point2d(PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.cos(self.EXPLORATION_ANGLE*math.pi/180),
-                            PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.sin(self.EXPLORATION_ANGLE*math.pi/180))
+        exploration_angle = self.heading + 180
+        if exploration_angle >= 360:
+            exploration_angle -= 360
+        delta_pos = Point2d(PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.cos(exploration_angle*math.pi/180),
+                            PLAYER_BASE_SPEED*self.EXPLORATION_PERIOD*math.sin(exploration_angle*math.pi/180))
         self.next_exploration_point = self.modeling.player_position() + delta_pos
 
     def has_seen_ocean(self) -> bool:
@@ -991,55 +1007,46 @@ class WorldModel:
             return True
 
     def check_for_ocean_around(self) -> bool:
-        # use openCV stuff for dilation of ocean, then get stuff at border
-        x_min = min(self.c1.x1, self.c2.x1, self.c3.x1, self.c4.x1)
-        y_min = min(self.c1.x2, self.c2.x2, self.c3.x2, self.c4.x2)
-        x_max = max(self.c1.x1, self.c2.x1, self.c3.x1, self.c4.x1)
-        y_max = max(self.c1.x2, self.c2.x2, self.c3.x2, self.c4.x2)
-        first_x_line = int((x_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE)
-        first_y_line = int((y_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE)
-        last_x_line = int((x_max // TILE_SIZE) * TILE_SIZE - TILE_SIZE)
-        last_y_line = int((y_max // TILE_SIZE) * TILE_SIZE - TILE_SIZE)
-        tiles = self.tile_manager.get_tiles((first_x_line//TILE_SIZE, first_y_line//TILE_SIZE), (last_x_line//TILE_SIZE, last_y_line//TILE_SIZE))
+        player_tile = (int(self.modeling.player_position().x1 // TILE_SIZE), int(self.modeling.player_position().x2 // TILE_SIZE))
+        left_corner = (player_tile[0] - self.OCEAN_NEARBY_TILE_RANGE, player_tile[1] - self.OCEAN_NEARBY_TILE_RANGE)
+        right_corner = (player_tile[0] + self.OCEAN_NEARBY_TILE_RANGE, player_tile[1] + self.OCEAN_NEARBY_TILE_RANGE)
+        tiles = self.tile_manager.get_tiles(left_corner, right_corner)
         tiles_ocean = tiles == self.tile_manager.color_names_to_numbers["ocean"]
-        # this means there's at least one tile of ocean in view
-        if tiles_ocean.any():
-            dilated_tiles_ocean = cv2.dilate(tiles_ocean.astype(np.uint8), np.ones((5, 5)))
-            borders = cv2.Laplacian(dilated_tiles_ocean, -1)
-            x_candidates, y_candidates = np.where(borders != 0)
-            for i in range(x_candidates.shape[0]):
-                x_candidates[i] += first_x_line//TILE_SIZE
-                y_candidates[i] += first_y_line//TILE_SIZE
-            self._latest_x_candidates = x_candidates
-            self._latest_y_candidates = y_candidates
-            return True
-        
-        return False
+        return tiles_ocean.any()
     
     def search_for_valid_exploration_point(self) -> None:
         player_tile = (self.modeling.player_position().x1 // TILE_SIZE, self.modeling.player_position().x2 // TILE_SIZE)
-        x_candidates = self._latest_x_candidates
-        y_candidates = self._latest_y_candidates
-        closest_manh_dist = None
+        player_tile = (int(self.modeling.player_position().x1 // TILE_SIZE), int(self.modeling.player_position().x2 // TILE_SIZE))
+        left_corner = (player_tile[0] - self.OCEAN_NEARBY_TILE_RANGE, player_tile[1] - self.OCEAN_NEARBY_TILE_RANGE)
+        right_corner = (player_tile[0] + self.OCEAN_NEARBY_TILE_RANGE, player_tile[1] + self.OCEAN_NEARBY_TILE_RANGE)
+        tiles = self.tile_manager.get_tiles(left_corner, right_corner)
+        tiles_ocean = tiles == self.tile_manager.color_names_to_numbers["ocean"]
+        dilated_tiles_ocean = cv2.dilate(tiles_ocean.astype(np.uint8), np.ones((5, 5)))
+        borders = cv2.Laplacian(dilated_tiles_ocean, -1)
+        x1_candidates, x2_candidates = np.where(borders != 0)
+        for i in range(x1_candidates.shape[0]):
+            x1_candidates[i] += left_corner[0]
+            x2_candidates[i] += left_corner[1]
+        closest_dist = None
         closest_candidates : list[Point2d] = []
-        for i in range(x_candidates.shape[0]):
+        for i in range(x1_candidates.shape[0]):
             # tile indexes
-            x = x_candidates[i]
-            y = y_candidates[i]
+            x1 = x1_candidates[i]
+            x2 = x2_candidates[i]
 
-            point = Point2d(x*TILE_SIZE + TILE_SIZE//2, y*TILE_SIZE + TILE_SIZE//2)
+            point = Point2d(x1*TILE_SIZE + TILE_SIZE//2, x2*TILE_SIZE + TILE_SIZE//2)
             if (point.x1, point.x2) in self.ocean_exploration_points_list:
                 continue
 
-            delta_x = abs(x - player_tile[0])
-            delta_y = abs(y - player_tile[1])
-            manh_dist = max(delta_x, delta_y)
-            if manh_dist == 0:
+            delta_x1 = abs(x1 - player_tile[0])
+            delta_x2 = abs(x2 - player_tile[1])
+            dist = max(delta_x1, delta_x2)
+            if dist == 0:
                 continue
-            if closest_manh_dist is None or closest_manh_dist >= manh_dist:
-                if closest_manh_dist is None or closest_manh_dist > manh_dist:
+            if closest_dist is None or closest_dist >= dist:
+                if closest_dist is None or closest_dist > dist:
                     closest_candidates = []
-                closest_manh_dist = manh_dist
+                closest_dist = dist
                 closest_candidates.append(point)
         if len(closest_candidates) == 1:
             self.next_exploration_point = closest_candidates[0]
@@ -1136,9 +1143,9 @@ class WorldModelTimer(WorldModel):
     
     def start_cycle(self, past_player_position: Point2d, 
                     heading: float = CAMERA_HEADING, pitch: float = CAMERA_PITCH, distance: float = CAMERA_DISTANCE, 
-                    fov: float = FOV) -> None:
+                    fov: float = FOV, follow_height : float = FOLLOW_HEIGHT) -> None:
         t1 = time.time_ns()
-        super().start_cycle(past_player_position, heading, pitch, distance, fov)
+        super().start_cycle(past_player_position, heading, pitch, distance, fov, follow_height)
         t2  = time.time_ns()
         self.time_records_list.append(("start_cycle", t2-t1))
     

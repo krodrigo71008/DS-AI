@@ -403,7 +403,7 @@ def try_out_warp_perspective(image_path: str):
     modeling = Modeling()
     world = modeling.world_model
     image = Image.open(image_path).resize((512, 512))
-    res = world.warp_image_to_ground(np.asarray(image), CAMERA_HEADING, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+    res = world.warp_image_to_ground(np.asarray(image), 135, CAMERA_PITCH, CAMERA_DISTANCE, FOV)[0]
     Image.fromarray(res).save("warped_test.jpg")
     return res
 
@@ -461,7 +461,7 @@ def aux_test_inverseH(u, v):
     
 def test_uv_model():
     modeling = Modeling()
-    follow_height = modeling.world_model.FOLLOW_HEIGHT
+    follow_height = FOLLOW_HEIGHT
     distance = CAMERA_DISTANCE
     fov = FOV
     heading = CAMERA_HEADING

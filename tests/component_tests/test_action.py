@@ -1,7 +1,9 @@
-from action.Action import Action
-from control.Control import Control
+import time
 
 import pytest
+
+from action.Action import Action
+from control.Control import Control
 
 
 @pytest.fixture
@@ -56,3 +58,31 @@ def test_keys_released(control_and_action : tuple[Control, Action], commands_lis
         control.mouse_action = comm[1]
         res = action.act_mock(control)
         assert set(res) == set(expected_res)
+
+def manual_test_camera_rotation():
+    CYCLE_TIME = 0.1
+    control = Control()
+    action = Action()
+    pauses = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    action_list = []
+    for p in pauses:
+        for _ in range(8):
+            action_list.append("q")
+            action_list.extend([""]*p)
+        for _ in range(8):
+            action_list.append("e")
+            action_list.extend([""]*p)
+        action_list.append("pause")
+
+    for a in action_list:
+        if a == "pause":
+            print("pause")
+            time.sleep(2)
+        else:
+            if a == "":
+                control.key_action = None
+            else:
+                control.key_action = ([a], "press_and_release")
+                print(a)
+            action.act(control)
+            time.sleep(CYCLE_TIME)

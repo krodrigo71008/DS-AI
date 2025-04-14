@@ -30,6 +30,7 @@ class Modeling:
         self.latest_segmentation_timestamp : float = None
         self.received_yolo_info : bool = False
         self.received_segmentation_info : bool = False
+        self.do_image_processing : bool = True
         self.slam = Slam(debug)
         # slam state
         self.xEst = np.array([[TILE_SIZE//2, TILE_SIZE//2]], dtype=np.float32).T
@@ -49,6 +50,8 @@ class Modeling:
         self.player_momentum : Point2d = None
         self.last_player_position : Point2d = None
         self.MOMENTUM_FACTOR = 0.25
+        self.last_image_diffs = []
+        self._record_image_diffs = False
 
         if self.debug:
             # self.pests = []
@@ -58,6 +61,15 @@ class Modeling:
             self.latest_image_objs = None
             self.latest_new_objects = None
             self.xEst_size_at_time_of_new_object_creation = None
+            self.which_info_was_received_list = []
+
+    def get_record_image_diffs(self):
+        return self._record_image_diffs
+    
+    def set_record_image_diffs(self, value : bool):
+        if value:
+            self.last_image_diffs = []
+        self._record_image_diffs = value
 
     def handle_detected_objects_queue(self, detected_objects_queue: Queue) -> list[ImageObject]:
         if detected_objects_queue.empty():
@@ -66,11 +78,19 @@ class Modeling:
         else:
             # it's very unlikely that Perception puts more than one detection in the queue before this finishes a cycle, but this is just in case
             while not detected_objects_queue.empty():
-                obj_list, timestamp = detected_objects_queue.get()
+                obj_list, diff, timestamp = detected_objects_queue.get()
+                if diff is not None and self._record_image_diffs:
+                    self.last_image_diffs.append(diff)
                 self.latest_yolo_timestamp = timestamp
-            self.received_yolo_info = True
-            self.latest_detected_objects = obj_list
-        
+            if self.debug:
+                self.which_info_was_received_list[-1][0] = self.latest_yolo_timestamp
+            if self.do_image_processing:
+                self.received_yolo_info = True
+                self.latest_detected_objects = obj_list
+            else:
+                obj_list : list[ImageObject] = self.latest_detected_objects
+                self.received_yolo_info = False
+
         return obj_list
 
     def handle_segmentation_queue(self, segmentation_queue: Queue) -> np.ndarray:
@@ -82,8 +102,14 @@ class Modeling:
             while not segmentation_queue.empty():
                 segmentation_info, timestamp = segmentation_queue.get()
                 self.latest_segmentation_timestamp = timestamp
-            self.received_segmentation_info = True
-            self.latest_segmentation_info = segmentation_info
+            if self.debug:
+                self.which_info_was_received_list[-1][1] = self.latest_segmentation_timestamp
+            if self.do_image_processing:
+                self.received_segmentation_info = True
+                self.latest_segmentation_info = segmentation_info
+            else:
+                segmentation_info : np.ndarray = self.latest_segmentation_info
+                self.received_segmentation_info = False
         
         return segmentation_info
 
@@ -122,13 +148,16 @@ class Modeling:
         if self.received_yolo_info:
             if self._direction is None:
                 past_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0])
+                print("dt not considered, direction is None")
             else:
                 # latest_yolo_timestamp is when yolo sent the information, the clock timestamp is when Modeling starts its loop
                 # this means dt should be negative, which is why we add it instead of subtracting it
                 dt = self.latest_yolo_timestamp - self.clock.raw_timestamp()
+                print("dt", dt)
                 assert dt <= 0
                 past_player_position = Point2d(self.xEst[0, 0], self.xEst[1, 0]) + Point2d(math.cos(self._direction), math.sin(self._direction))*dt*self.DEFAULT_SPEED
-            
+                print("past_player_position", past_player_position, "xEst", Point2d(self.xEst[0, 0], self.xEst[1, 0]))
+
             player_positions = [Point2d.bottom_from_box(obj.box) for obj in obj_list if objects_info.get_item_info(image_id=obj.id, info="object_type") == "PLAYER"]
             # decide which of the detected player positions is the real one
             self.world_model.decide_player_position(player_positions)
@@ -167,6 +196,8 @@ class Modeling:
             self.world_model.process_segmentation_image(segmentation_info, past_player_position)
 
     def update_model(self, detected_objects_queue: Queue, segmentation_queue: Queue):
+        if self.debug:
+            self.which_info_was_received_list.append([-1, -1])
         obj_list = self.handle_detected_objects_queue(detected_objects_queue)
         segmentation_info = self.handle_segmentation_queue(segmentation_queue)
 
@@ -187,7 +218,8 @@ class Modeling:
             return ([(class_name, [(obj.position(), obj.std()) for obj in obj_list]) for class_name, obj_list in self.world_model.object_lists.items()], 
                     [self.world_model.c1, self.world_model.c2, self.world_model.c3, self.world_model.c4], 
                     (Point2d(self.xEst[0, 0], self.xEst[1, 0]), (self.PEst[0, 0], self.PEst[1, 1])), 
-                    self.world_model.tile_manager)
+                    self.world_model.tile_manager,
+                    self.clock.time())
 
     def remove_from_slam_state(self, slam_state_index : int):
         self.xEst = np.concatenate((self.xEst[:slam_state_index], self.xEst[slam_state_index+self.slam.LM_SIZE:]))

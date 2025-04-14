@@ -36,3 +36,7 @@ CLOSE_ENOUGH_DISTANCE = 1
 CLOSE_ENOUGH_DISTANCE_FOR_EXPLORATION = 2
 # time for the collecting animation + buffer to get close enough
 COLLECT_DURATION = 1.5
+# if an object that we want to collect is closer than this, we decide to collect it
+RESOURCE_GATHERING_DISTANCE = 15
+# duration of the camera rotation action
+CAMERA_ROTATION_DURATION = 2

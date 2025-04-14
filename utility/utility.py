@@ -378,3 +378,6 @@ def mode(ndarray : np.ndarray, axis : int = 0) -> tuple[np.ndarray, np.ndarray]:
     index = np.ogrid[slices]
     index.insert(axis, np.argmax(counts, axis=axis))
     return sort[index], counts[index]
+
+def clamp(number, min_value, max_value):
+    return min_value if number < min_value else max_value if number > max_value else number

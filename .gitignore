@@ -32,3 +32,5 @@ test.py
 *.zip
 *.pt
 *.npy
+*.mp4
+times/*.csv

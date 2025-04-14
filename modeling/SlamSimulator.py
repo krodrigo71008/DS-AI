@@ -11,7 +11,7 @@ from perception.ImageObject import ImageObject
 from modeling.Modeling import Modeling
 from modeling.WorldModel import WorldModelSlamMock
 from modeling.Slam import SlamTimer
-from modeling.constants import PLAYER_BASE_SPEED, CAMERA_HEADING
+from modeling.constants import PLAYER_BASE_SPEED
 from modeling.utility import image_to_local_position
 from control.constants import CLOSE_ENOUGH_DISTANCE
 from control.Control import Control
@@ -180,7 +180,7 @@ class SlamSimulator():
             # this should never happen
             raise Exception("Invalid keys!")
         
-        angle += CAMERA_HEADING
+        angle += self.world_model.heading
         angle *= math.pi/180
         angle = clamp2pi(angle)
         return angle

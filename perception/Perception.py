@@ -4,6 +4,7 @@ import mss
 import numpy as np
 from PIL import Image
 from ultralytics import YOLO
+import cv2
 
 from perception.ImageObject import ImageObject
 from perception.constants import SCREEN_SIZE, SCREEN_POS
@@ -21,6 +22,7 @@ class Perception:
         self.NMS_THRESHOLD = .7
         self.sct = mss.mss()
         self.objects = []
+        self.last_screenshot = None
         self.debug = debug
         if self.debug:
             self.queue = queue
@@ -68,11 +70,16 @@ class Perception:
 
     def perceive(self, frame : np.ndarray = None):
         frame = self.get_screenshot(frame) # takes like 30 ms avg
+        if self.last_screenshot is not None:
+            diff = np.average(cv2.absdiff(self.last_screenshot, frame))
+        else:
+            diff = None
+        self.last_screenshot = frame.copy()
         frame = self.hide_huds(frame)
         classes, scores, boxes = self.process_frame(frame) # takes like 50 ms avg
         self.create_objects(classes, scores, boxes)
         self.put_in_queue(frame, classes, scores, boxes)
-        return self.objects, classes, scores, boxes
+        return self.objects, classes, scores, boxes, diff
 
 class PerceptionRecorder(Perception):
     def __init__(self, debug=False, queue=None):

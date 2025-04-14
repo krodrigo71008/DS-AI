@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 class DecisionMaking:
     def __init__(self, debug=False):
-        self.primary_action = None
+        self.primary_decision = None
         self.resources_request = None
         self.action_requester = ActionRequester()
         self.behavior_tree = DSBehaviorTree()
@@ -32,7 +32,7 @@ class DecisionMaking:
     # should be called every loop
     def primary_system(self, modeling: Modeling) -> None:
         self.behavior_tree.update(modeling, self.action_requester)
-        self.primary_action = self.action_requester.get_action()
+        self.primary_decision = self.action_requester.get_action()
         self.resources_request = self.action_requester.get_resources_request()
 
     # takes control when needed
@@ -44,7 +44,7 @@ class DecisionMaking:
             food_counts = modeling.player_model.inventory.get_inventory_count(foods)
             # if we have no food, look for it
             if np.array(food_counts).sum() == 0:
-                self.primary_action = ("gather", [("food", 99)])
+                self.primary_decision = ("gather", [("food", 99)])
             else:
                 if modeling.player_model.hunger < 15:
                     hunger_points_to_fill = modeling.player_model.max_hunger - modeling.player_model.hunger
@@ -55,10 +55,10 @@ class DecisionMaking:
             torch_count = modeling.player_model.inventory.get_inventory_count(["Torch"])
             # this will fail if we don't have materials to craft it, but we should have enough
             if np.array(torch_count).sum() == 0:
-                self.primary_action = ("craft", "Torch")
+                self.primary_decision = ("craft", "Torch")
             else:
                 if modeling.player_model.inventory.slots["Hand"].object.name != "Torch":
-                    self.primary_action = ("equip", "Torch")
+                    self.primary_decision = ("equip", "Torch")
         else:
             monsters = [
                 "Treeguard", "KillerBee", "Frog", "Hound", "IceHound", "FireHound", "Spider", "SpiderWarrior",
@@ -97,12 +97,12 @@ class DecisionMaking:
             health_delta = effective_count*health_value
             if best_food_and_count[1] is None or health_delta > best_food_and_count[1]:
                 best_food_and_count = ((food_name, effective_count), health_delta)
-        self.primary_action = ("eat", best_food_and_count[0])
+        self.primary_decision = ("eat", best_food_and_count[0])
 
     def run_away_from(self, danger_position: Point2d, player_position: Point2d) -> None:
         # direction_to_run in radians
         direction_to_run = (player_position - danger_position).angle()
-        self.primary_action = ("run", direction_to_run)
+        self.primary_decision = ("run", direction_to_run)
 
     # main function that should be called
     def decide(self, modeling):
@@ -111,8 +111,8 @@ class DecisionMaking:
         self.emergency_system(modeling)
         
         if self.debug:
-            self.records.append((self.primary_action, self.resources_request))
-            return (self.primary_action, self.resources_request)
+            self.records.append((self.primary_decision, self.resources_request))
+            return (self.primary_decision, self.resources_request)
 
 class DecisionMakingTimer(DecisionMaking):
     def __init__(self, debug=False):

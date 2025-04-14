@@ -1,11 +1,15 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 from enum import Enum
+import math
+
+import numpy as np
 
 from modeling.objects.PickableObjectModel import PickableObjectModel
 from modeling.ObjectsInfo import objects_info
 from control.constants import CRAFT_KEYPRESS_DURATION, CLOSE_ENOUGH_DISTANCE, CLOSE_ENOUGH_DISTANCE_FOR_EXPLORATION
-from control.constants import COLLECT_DURATION
+from control.constants import COLLECT_DURATION, CAMERA_ROTATION_DURATION
+from utility.utility import clamp2pi
 
 if TYPE_CHECKING:
     from modeling.Modeling import Modeling
@@ -35,12 +39,13 @@ class BehaviorTree(object):
         """
         self.root = root
 
-    def update(self, modeling : Modeling, action_requester : ActionRequester) -> bool:
+    def update(self, modeling : Modeling, action_requester : ActionRequester) -> ExecutionStatus:
         """
         Updates the behavior tree.
 
         :param modeling: the modeling that will be used to decide the next action
         :param action_requester: records the action to be requested
+        :return: status of the root node
         """
         if self.root is not None:
             return self.root.execute(modeling, action_requester)
@@ -48,7 +53,6 @@ class BehaviorTree(object):
     def get_running_leaf(self):
         return self.root.get_running_leaf()
                 
-
 
 class TreeNode(object):
     """
@@ -320,7 +324,7 @@ class WaitForSegmentationInfo(LeafNode):
         super().__init__("WaitForSegmentationInfo")
 
     def enter(self, modeling : Modeling, action_requester : ActionRequester):
-        action_requester.set_action(("nothing",))
+        action_requester.set_action(("nothing", None))
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
         if modeling.world_model.tile_manager.detection_count < modeling.world_model.tile_manager._MAX_QUEUE_SIZE:
@@ -333,7 +337,7 @@ class DoNothing(LeafNode):
         super().__init__("DoNothing")
 
     def enter(self, modeling : Modeling, action_requester : ActionRequester):
-        action_requester.set_action(("nothing",))
+        action_requester.set_action(("nothing", None))
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
         return ExecutionStatus.RUNNING
@@ -437,7 +441,7 @@ class OceanExplorationBehaviorTree(BehaviorTree):
         self.root.looped_node.children[0].add_child(SelectorNode("ExploreAroundOcean"))
         self.root.looped_node.children[0].children[1].add_child(SequenceNode("CheckVisibleOcean"))
         self.root.looped_node.children[0].children[1].add_child(GoBackToPreviousOceanPoint())
-        self.root.looped_node.children[0].children[1].children[0].add_child(VisibleOceanAround())
+        self.root.looped_node.children[0].children[1].children[0].add_child(CloseToOcean())
         self.root.looped_node.children[0].children[1].children[0].add_child(GoToNextOceanPoint())
 
 class GoSomewhere(LeafNode):
@@ -454,7 +458,7 @@ class GoSomewhere(LeafNode):
             return ExecutionStatus.FAILURE
         elif (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
             >= CLOSE_ENOUGH_DISTANCE_FOR_EXPLORATION):
-            action_requester.set_action(("go", modeling.world_model.next_exploration_point))
+            action_requester.set_action(("request_go", modeling.world_model.next_exploration_point))
             return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
@@ -485,20 +489,23 @@ class GoBackToPreviousOceanPoint(LeafNode):
             return ExecutionStatus.FAILURE
         elif (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
             >= CLOSE_ENOUGH_DISTANCE_FOR_EXPLORATION):
-            action_requester.set_action(("go", modeling.world_model.next_exploration_point))
+            action_requester.set_action(("request_go", modeling.world_model.next_exploration_point))
             return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
 
-class VisibleOceanAround(LeafNode):
+class CloseToOcean(LeafNode):
     def __init__(self):
-        super().__init__("VisibleOceanAround")
+        super().__init__("CloseToOcean")
 
     def enter(self, modeling : Modeling, action_requester : ActionRequester):
         pass
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
-        if modeling.world_model.check_for_ocean_around():
+        # next_exploration_point being None means that we need to create the new point,
+        # so we need to run GoToNextOceanPoint
+        if (modeling.world_model.next_exploration_point is None or
+            modeling.world_model.next_exploration_point.distance(modeling.player_position()) < CLOSE_ENOUGH_DISTANCE_FOR_EXPLORATION):
             return ExecutionStatus.SUCCESS
         else:
             return ExecutionStatus.FAILURE
@@ -517,7 +524,7 @@ class GoToNextOceanPoint(LeafNode):
             return ExecutionStatus.FAILURE
         elif (modeling.world_model.next_exploration_point.distance(modeling.player_position()) 
             >= CLOSE_ENOUGH_DISTANCE_FOR_EXPLORATION):
-            action_requester.set_action(("go", modeling.world_model.next_exploration_point))
+            action_requester.set_action(("request_go", modeling.world_model.next_exploration_point))
             return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
@@ -743,7 +750,7 @@ class CloseEnough(LeafNode):
         pass
 
     def execute(self, modeling : Modeling, action_requester : ActionRequester):
-        if modeling.player_position().distance(self.objective.position()) >= CLOSE_ENOUGH_DISTANCE:
+        if modeling.player_position().distance(self.objective) >= CLOSE_ENOUGH_DISTANCE:
             return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
@@ -761,7 +768,7 @@ class MoveCloser(LeafNode):
         if modeling.clock.time() - self.start_time >= 60:
             return ExecutionStatus.FAILURE
         elif modeling.player_position().distance(self.objective.position()) >= CLOSE_ENOUGH_DISTANCE:
-            action_requester.set_action(("go", self.objective))
+            action_requester.set_action(("request_go", self.objective))
             return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
@@ -781,3 +788,112 @@ class CollectSomething(LeafNode):
             return ExecutionStatus.RUNNING
         else:
             return ExecutionStatus.SUCCESS
+
+class RotateCameraBehaviorTree(BehaviorTree):
+    """
+    Represents a behavior tree of the Craft Behavior.
+    """
+    def __init__(self, objective_angle : float):
+        super().__init__()
+        self.root = SequenceNode("MainNode")
+        self.root.add_child(WaitTwoSeconds())
+        self.root.add_child(StartRotation())
+        self.root.add_child(NegateNode(LoopNode(SequenceNode("CheckAngle"))))
+        self.root.add_child(FinishRotation())
+        self.root.children[2].negated_node.looped_node.add_child(IsCameraAngleWrong(objective_angle))
+        self.root.children[2].negated_node.looped_node.add_child(RotateCamera(objective_angle))
+        self.root.children[2].negated_node.looped_node.add_child(ConfirmRotation())
+
+class WaitTwoSeconds(LeafNode):
+    def __init__(self):
+        super().__init__("WaitTwoSeconds")
+        self.start_time = None
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        self.start_time = modeling.clock.time()
+        action_requester.set_action(("nothing", None))
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        if modeling.clock.time() - self.start_time >= 2:
+            return ExecutionStatus.SUCCESS
+        else:
+            return ExecutionStatus.RUNNING
+
+class StartRotation(LeafNode):
+    def __init__(self):
+        super().__init__("StartRotation")
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        modeling.do_image_processing = False
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        print("StartRotation")
+        return ExecutionStatus.SUCCESS
+
+class FinishRotation(LeafNode):
+    def __init__(self):
+        super().__init__("FinishRotation")
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        modeling.do_image_processing = True
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        print("FinishRotation")
+        return ExecutionStatus.SUCCESS
+
+class IsCameraAngleWrong(LeafNode):
+    def __init__(self, objective_angle : float):
+        super().__init__("IsCameraAngleWrong")
+        self.objective_angle = objective_angle
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        pass
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        angle_difference = clamp2pi(modeling.world_model.heading/180*math.pi - self.objective_angle)
+        if angle_difference <= math.pi/2 and angle_difference >= -math.pi/2:
+            return ExecutionStatus.SUCCESS
+        else:
+            return ExecutionStatus.FAILURE
+
+class RotateCamera(LeafNode):
+    def __init__(self, objective_angle : float):
+        super().__init__("RotateCamera")
+        self.objective_angle = objective_angle
+        self.start_time = None
+        self.action = None
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        self.start_time = modeling.clock.time()
+        angle_difference = clamp2pi(modeling.world_model.heading/180*math.pi - self.objective_angle)
+        if angle_difference > 0:
+            self.action = "e"
+        else:
+            self.action = "q"
+        action_requester.set_action(("press_and_release", [self.action]))
+        modeling.set_record_image_diffs(True)
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        if modeling.clock.time() - self.start_time >= CAMERA_ROTATION_DURATION:
+            return ExecutionStatus.SUCCESS
+        else:
+            return ExecutionStatus.RUNNING
+
+class ConfirmRotation(LeafNode):
+    def __init__(self):
+        super().__init__("ConfirmRotation")
+        self.action = None
+
+    def enter(self, modeling : Modeling, action_requester : ActionRequester):
+        self.action = self.parent.children[1].action
+
+    def execute(self, modeling : Modeling, action_requester : ActionRequester):
+        modeling.set_record_image_diffs(False)
+        diffs = modeling.last_image_diffs
+        above_rate = np.sum(diffs > np.mean(diffs))/len(diffs)
+        if above_rate <= 0.3 and np.std(diffs) > 1.5:
+            if self.action == "e":
+                modeling.world_model.turn_camera_right_e()
+            else:
+                modeling.world_model.turn_camera_left_q()
+        return ExecutionStatus.SUCCESS

@@ -1,37 +1,41 @@
 import time
 from multiprocessing import Process, Queue, Value
-import pickle
+import os
 
 import keyboard
 import pandas as pd
+import numpy as np
 
 from action.Action import Action, ActionTimer
 from control.Control import Control, ControlTimer
 from decisionMaking.DecisionMaking import DecisionMaking, DecisionMakingTimer
 from modeling.Modeling import Modeling, ModelingTimer
 from modeling.constants import BASE_CONTROL_DT
-from perception.Perception import Perception, PerceptionTimer
-from perception.SegmentationModel import SegmentationModel, SegmentationTimer
+from perception.Perception import PerceptionRecorder, PerceptionTimer
+from perception.SegmentationModel import SegmentationRecorder, SegmentationTimer
 from utility.DebugScreen import DebugScreen
+from utility.Clock import ClockRecorder
 
 
-MAX_TIMEOUT_TIME = 60
+MAX_TIMEOUT_TIME = 120
 
-def vision_main(detected_objects_queue: Queue, should_start: Value, should_stop: Value, 
+def vision_main(detected_objects_queue: Queue, should_start, should_stop, 
                 q: Queue = None, should_record_times : bool = False):
     if should_record_times:
         perception = PerceptionTimer(debug=q is not None, queue=q)
     else:
-        perception = Perception(debug=q is not None, queue=q)
+        perception = PerceptionRecorder(debug=q is not None, queue=q)
     print("Perception ready")
     while should_start.value == 0:
         pass
+    vision_timestamps = []
     start = time.time()
     while should_stop.value == 0 and time.time() - start < MAX_TIMEOUT_TIME:
         timestamp = time.time()
-        objects = perception.perceive()[0]
+        vision_timestamps.append(timestamp)
+        objects, _, _, _, diff = perception.perceive()
         try:
-            detected_objects_queue.put((objects, timestamp))
+            detected_objects_queue.put((objects, diff, timestamp))
         except ValueError:
             print("detected_objects_queue closed")
 
@@ -40,23 +44,30 @@ def vision_main(detected_objects_queue: Queue, should_start: Value, should_stop:
         perception_df = pd.DataFrame(perception.time_records, columns=perception.split_names)
         perception_df.to_csv("times/perception.csv", index=False)
 
+    if q is not None and not should_record_times:
+        np.save("new_records/vision_times.npy", vision_timestamps, allow_pickle=False)
+        for i, cap_img in enumerate(perception.all_captured_images):
+            np.save(f"new_records/vision_{i}.npy", cap_img, allow_pickle=False)
+
     detected_objects_queue.cancel_join_thread()
     if q is not None:
         q.cancel_join_thread()
     print("Perception done")
 
-def segmentation_main(segmentation_results_queue: Queue, should_start: Value, should_stop: Value, 
+def segmentation_main(segmentation_results_queue: Queue, should_start, should_stop, 
                       q: Queue = None, should_record_times : bool = False):
     if should_record_times:
         seg_model = SegmentationTimer(debug=q is not None, queue=q)
     else:
-        seg_model = SegmentationModel(debug=q is not None, queue=q)
+        seg_model = SegmentationRecorder(debug=q is not None, queue=q)
     print("Segmentation ready")
     while should_start.value == 0:
         pass
+    segmentation_timestamps = []
     start = time.time()
     while should_stop.value == 0 and time.time() - start < MAX_TIMEOUT_TIME:
         timestamp = time.time()
+        segmentation_timestamps.append(timestamp)
         results = seg_model.perceive()
         try:
             segmentation_results_queue.put((results, timestamp))
@@ -68,12 +79,17 @@ def segmentation_main(segmentation_results_queue: Queue, should_start: Value, sh
         segmentation_df = pd.DataFrame(seg_model.time_records, columns=seg_model.split_names)
         segmentation_df.to_csv("times/segmentation.csv", index=False)
 
+    if q is not None and not should_record_times:
+        np.save("new_records/segmentation_times.npy", segmentation_timestamps, allow_pickle=False)
+        for i, cap_img in enumerate(seg_model.all_captured_images):
+            np.save(f"new_records/segmentation_{i}.npy", cap_img, allow_pickle=False)
+
     segmentation_results_queue.cancel_join_thread()
     if q is not None:
         q.cancel_join_thread()
     print("Segmentation done")
 
-def control_main(detected_objects_queue: Queue, segmentation_queue: Queue, should_start: Value, should_stop: Value, 
+def control_main(detected_objects_queue: Queue, segmentation_queue: Queue, should_start, should_stop, 
                  q: Queue = None, should_record_times : bool = False):
     if should_record_times:
         action = ActionTimer(debug=q is not None)
@@ -82,9 +98,11 @@ def control_main(detected_objects_queue: Queue, segmentation_queue: Queue, shoul
         modeling = ModelingTimer(debug=q is not None)
     else:
         action = Action(debug=q is not None)
-        control = Control(debug=q is not None)
+        control_clock = ClockRecorder()
+        control = Control(debug=q is not None, clock=control_clock)
         decision_making = DecisionMaking(debug=q is not None)
-        modeling = Modeling(debug=q is not None)
+        modeling_clock = ClockRecorder()
+        modeling = Modeling(debug=q is not None, clock=modeling_clock)
     print("Control ready")
     while should_start.value == 0:
         pass
@@ -149,8 +167,12 @@ def control_main(detected_objects_queue: Queue, segmentation_queue: Queue, shoul
     
     detected_objects_queue.cancel_join_thread()
     segmentation_queue.cancel_join_thread()
-    if q is not None:
+    if q is not None and not should_record_times:
         q.cancel_join_thread()
+        assert len(modeling_clock.time_records) == len(modeling.which_info_was_received_list) + 2
+        np.save(f"new_records/modeling_clock_times.npy", modeling_clock.time_records, allow_pickle=False)
+        np.save(f"new_records/modeling_received_infos.npy", modeling.which_info_was_received_list, allow_pickle=False)
+        np.save(f"new_records/control_clock_times.npy", control_clock.time_records, allow_pickle=False)
 
     # save action time records
     dt_df = pd.DataFrame({'dt': dts})
@@ -166,6 +188,7 @@ if __name__ == "__main__":
     debug = True
     should_record_times = False
     if debug:
+        os.makedirs("new_records", exist_ok=True)
         should_start = Value('b', 0)
         should_stop = Value('b', 0)
         detected_objects_queue = Queue()

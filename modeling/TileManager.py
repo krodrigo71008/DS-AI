@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.stats import mode
 
+from utility.utility import clamp
+
 class TileManager:
     def __init__(self):
         # tiles is a XxYxN array, with N being number of detections recorded (e.g. N=10 means that 
@@ -31,7 +33,7 @@ class TileManager:
         return (x - self._x1_shift, y - self._x2_shift)
 
     def get_tiles(self, p1 : tuple[int, int], p2 : tuple[int, int]) -> np.ndarray:
-        """Get tiles ids from a certain area
+        """Get tiles ids from a certain area, returns -1 on unexplored tiles
 
         :param p1: leftupper corner
         :type p1: tuple[int, int]
@@ -43,22 +45,40 @@ class TileManager:
         assert p1[0] <= p2[0]
         assert p1[1] <= p2[1]
         if self.tiles is None:
-            return None
+            return np.full((p2[0]-p1[0]+1, p2[1]-p1[1]+1), -1)
+        paddings = [0, 0, 0, 0]
         p11, p12 = p1
         p21, p22 = p2
         conv_p11, conv_p12 = self._map_index_to_actual_index((p11, p12))
-        if conv_p11 < 0 or conv_p11 >= self.tiles.shape[0] or conv_p12 < 0 or conv_p12 >= self.tiles.shape[1]:
-            return None
         conv_p21, conv_p22 = self._map_index_to_actual_index((p21, p22))
-        if conv_p21 < 0 or conv_p21 >= self.tiles.shape[0] or conv_p22 < 0 or conv_p22 >= self.tiles.shape[1]:
-            return None
+        if conv_p11 < 0:
+            paddings[0] = -conv_p11
+        if conv_p12 < 0:
+            paddings[1] = -conv_p12
+        if conv_p21 >= self.tiles.shape[0]:
+            paddings[2] = conv_p21 - self.tiles.shape[0]+1
+        if conv_p22 >= self.tiles.shape[1]:
+            paddings[3] = conv_p22 - self.tiles.shape[1]+1
         
+        conv_p11 = clamp(conv_p11, 0, self.tiles.shape[0]-1)
+        conv_p12 = clamp(conv_p12, 0, self.tiles.shape[1]-1)
+        conv_p21 = clamp(conv_p21, 0, self.tiles.shape[0]-1)
+        conv_p22 = clamp(conv_p22, 0, self.tiles.shape[1]-1)
+
         # [0] gets values, [1] gets counts
         try:
             results = mode(self.tiles[conv_p11:conv_p21+1, conv_p12:conv_p22+1, :], axis=2, keepdims=False)[0]
         except Exception as e:
             print(conv_p11, conv_p21, conv_p12, conv_p22, e)
             raise Exception("aaa")
+        
+        left_padding = np.full((results.shape[0], paddings[0]), -1)
+        right_padding = np.full((results.shape[0], paddings[2]), -1)
+        results = np.concatenate((left_padding, results, right_padding), axis=1)
+        top_padding = np.full((paddings[1], results.shape[1]), -1)
+        bottom_padding = np.full((paddings[3], results.shape[1]), -1)
+        results = np.concatenate((top_padding, results, bottom_padding), axis=0)
+
         return results
 
     def get_tile(self, p : tuple[int, int]) -> np.ndarray:

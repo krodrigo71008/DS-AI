@@ -9,6 +9,7 @@ from control.Control import Control
 # so I reran it with act_mock instead of act and those big times disappeared, so it's probably some issue with the library
 class Action:
     def __init__(self, debug=False):
+        keyboard.release("w")
         self.current_keys = set()
         self.debug = debug
         if self.debug:
@@ -36,14 +37,13 @@ class Action:
                 self.current_keys = set(key_action[0])
             elif key_action[1] == "press_and_release":
                 # this is probably wrong, but for now just release all keys when doing it
-                if not control.action_on_cooldown:
-                    if len(self.current_keys) > 0:
-                        keyboard.release('+'.join(self.current_keys))
-                        self.current_keys = set()
-                    keyboard.press_and_release('+'.join(key_action[0]))
-                    if self.debug:
-                        self.records.append(('press_and_release', '+'.join(key_action[0])))
-                    self.current_keys = self.current_keys.difference(key_action[0])
+                if len(self.current_keys) > 0:
+                    keyboard.release('+'.join(self.current_keys))
+                    self.current_keys = set()
+                keyboard.press_and_release('+'.join(key_action[0]))
+                if self.debug:
+                    self.records.append(('press_and_release', '+'.join(key_action[0])))
+                self.current_keys = self.current_keys.difference(key_action[0])
         else:
             if len(self.current_keys) > 0:
                 keys_to_release = self.current_keys

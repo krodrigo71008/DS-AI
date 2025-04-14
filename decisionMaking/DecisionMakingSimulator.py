@@ -8,7 +8,7 @@ from PIL import Image
 from perception.constants import SCREEN_SIZE
 from perception.ImageObject import ImageObject
 from modeling.Modeling import Modeling
-from modeling.constants import PLAYER_BASE_SPEED, CAMERA_HEADING, TILE_SIZE
+from modeling.constants import PLAYER_BASE_SPEED, TILE_SIZE
 from modeling.utility import image_to_local_position
 from decisionMaking.DecisionMaking import DecisionMaking
 from control.Control import Control
@@ -142,7 +142,7 @@ class DecisionMakingSimulator():
             # this should never happen
             raise Exception("Invalid keys!")
         
-        angle += CAMERA_HEADING
+        angle += self.modeling.world_model.heading
         angle *= math.pi/180
         angle = clamp2pi(angle)
         return angle

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 import tkinter as tk
 from tkinter import ttk
 from multiprocessing import Queue
+import math
 
 import numpy as np
 from PIL import Image, ImageTk
@@ -24,6 +25,8 @@ class DebugScreen:
     # reminder that the two below this are in pixels
     WORLD_CANVAS_WIDTH = 400
     WORLD_CANVAS_HEIGHT = 400
+
+    RUNNING_DIRECTION_LENGTH = 2
     def __init__(self) -> None:
         self.window = tk.Tk()
         self.window.title("Debug screen")
@@ -33,16 +36,18 @@ class DebugScreen:
         self.control_debug_queue = Queue()
         self.window.grid_columnconfigure(0, weight=1)
         self.window.grid_columnconfigure(1, weight=1)
-        self.primary_action_label = ttk.Label(text="Primary action: -", font=("Arial", 30), wraplength=800, justify='center')
-        self.primary_action_label.grid(row=0, column=0, pady=2)
+        self.modeling_time_label = ttk.Label(text="Modeling time: -", font=("Arial", 30), wraplength=800, justify='center')
+        self.modeling_time_label.grid(row=0, column=0, pady=2)
+        self.primary_decision_label = ttk.Label(text="Primary action: -", font=("Arial", 30), wraplength=800, justify='center')
+        self.primary_decision_label.grid(row=1, column=0, pady=2)
         self.resources_request_label = ttk.Label(text="Secondary action: -", font=("Arial", 30), wraplength=800, justify='center')
-        self.resources_request_label.grid(row=1, column=0, pady=2)
+        self.resources_request_label.grid(row=2, column=0, pady=2)
         self.current_action_label = ttk.Label(text="Current action: -", font=("Arial", 30), wraplength=800, justify='center')
-        self.current_action_label.grid(row=2, column=0, pady=2)
+        self.current_action_label.grid(row=3, column=0, pady=2)
         self.key_label = ttk.Label(text="Key command: -", font=("Arial", 30), wraplength=800, justify='center')
-        self.key_label.grid(row=3, column=0, pady=2)
+        self.key_label.grid(row=4, column=0, pady=2)
         self.mouse_label = ttk.Label(text="Mouse command: -", font=("Arial", 30), wraplength=800, justify='center')
-        self.mouse_label.grid(row=4, column=0, pady=2)
+        self.mouse_label.grid(row=5, column=0, pady=2)
         # self.local_map_div = ttk.LabelFrame(self.window, text="Local modeling", padding=40)
         # self.local_map = tk.Canvas(self.local_map_div, height=self.LOCAL_CANVAS_HEIGHT, width=self.LOCAL_CANVAS_WIDTH, highlightbackground="red", highlightcolor="red", relief='ridge')
         # self.local_map.pack()
@@ -64,6 +69,7 @@ class DebugScreen:
         self.player_std = None
         self.world_objects = []
         self.objective : Point2d = None
+        self.running_direction : float = None
         self.fov_corners : list[float] = []
         self.palette = {}
         dsai_terrain_palette = [0, 0, 0, # bg black
@@ -110,10 +116,11 @@ class DebugScreen:
         # only use the most updated info
         if info is not None and info[0] == "control_info":
             _, q1, q2, q3 = info
-            world_model_objects, fov_corners, player_info, tile_manager = q1
-            primary_action, resources_request = q2
-            current_action, key_action, mouse_action = q3
-            self.primary_action_label["text"] = "Primary action: " + str(primary_action)
+            world_model_objects, fov_corners, player_info, tile_manager, modeling_time = q1
+            primary_decision, resources_request = q2
+            current_action, objective, key_action, mouse_action = q3
+            self.primary_decision_label["text"] = "Primary action: " + str(primary_decision)
+            self.modeling_time_label["text"] = "Modeling time: " + str(modeling_time)
             if resources_request is None:
                 self.resources_request_label["text"] = "Resources request: None"
             else:
@@ -125,11 +132,11 @@ class DebugScreen:
                 self.mouse_label["text"] = f"Mouse command: {str(mouse_action[0])}, {str(mouse_action[1])}"
             if current_action is None:
                 self.current_action_label["text"] = "Current action: None"
-            if current_action[0] == "go_to" or current_action[0] == "explore":
-                self.objective = current_action[1]
-                self.current_action_label["text"] = f"Current action: {str(current_action[0])}, {str(current_action[1])}"
             else:
                 self.current_action_label["text"] = "Current action: " + str(current_action)
+                if current_action[0] == "run":
+                    self.running_direction = current_action[1]
+            self.objective = objective
             self.world_map.delete('all')
             for name, info_list in world_model_objects:
                 if name == "Grass":
@@ -163,12 +170,15 @@ class DebugScreen:
             self.draw_shape(self.player_position.x1, self.player_position.x2, "circle", "global", x1_range, x2_range)
             self.draw_std(self.player_position.x1, self.player_position.x2, self.player_std, "global", x1_range, x2_range)
             if self.objective is not None:
-                self.draw_shape(self.objective.x1, self.objective.x2, "x", "global", x1_range, x2_range, "blue")
+                self.draw_shape(self.objective.x1, self.objective.x2, "x", "global", x1_range, x2_range, "red")
+                self.draw_line(self.objective.x1, self.objective.x2, self.player_position.x1, self.player_position.x2,
+                               "global", x1_range, x2_range, "red")
+            if self.running_direction is not None:
+                self.draw_running_direction(self.player_position, self.running_direction, "global", x1_range, x2_range, "gray")
             if len(self.fov_corners) > 0:
                 self.draw_fov(self.fov_corners, "global", x1_range, x2_range)
             self.draw_chunk_lines_world_canvas(CHUNK_SIZE, x1_range, x2_range)
             self.player_position = None
-            self.objective = None
             self.world_objects = []
         self.window.update_idletasks()
         self.window.update()
@@ -271,6 +281,76 @@ class DebugScreen:
         elif shape == "x":
             map_.create_line(x-6, y-6, x+6, y+6, fill=color)
             map_.create_line(x+6, y-6, x-6, y+6, fill=color)
+
+    def draw_line(self, x11 : float, x12 : float, x21 : float, x22 : float, canvas_name : str, 
+                  x1_range : tuple[float, float], x2_range : tuple[float, float],
+                  color : str = "black"):
+        """Draw line on the specified canvas
+
+        :param x11: x1 position of first point
+        :type x11: float
+        :param x12: x2 position of first point
+        :type x12: float
+        :param x21: x1 position of second point
+        :type x21: float
+        :param x22: x2 position of second point
+        :type x22: float
+        :param canvas_name: "global" for now
+        :type canvas_name: str
+        :param x1_range: x1 range of objects that should be drawn
+        :type x1_range: tuple[float, float]
+        :param x2_range: x2 range of objects that should be drawn
+        :type x2_range: tuple[float, float]
+        :param color: color of object to be drawn
+        :type color: str, defaults to black
+        """
+        # if canvas_name == "local":
+        #     map_ = self.local_map
+        #     x1 = x1/SCREEN_SIZE["width"]*self.LOCAL_CANVAS_WIDTH
+        #     x2 = x2/SCREEN_SIZE["height"]*self.LOCAL_CANVAS_HEIGHT
+        # elif canvas_name == "global":
+        if canvas_name == "global":
+            map_ = self.world_map
+            x1, y1 = self.convert_world_coords_to_world_graph(x11, x12, x1_range, x2_range)
+            x2, y2 = self.convert_world_coords_to_world_graph(x21, x22, x1_range, x2_range)
+        else:
+            raise ValueError("Wrong usage!")
+        map_.create_line(x1, y1, x2, y2, fill=color)
+
+    def draw_running_direction(self, player_position : Point2d, direction : float, canvas_name : str, 
+                               x1_range : tuple[float, float], x2_range : tuple[float, float],
+                               color : str = "gray"):
+        """Draw running direction on the specified canvas
+
+        :param player_position: player position
+        :type player_position: Point2d
+        :param direction: direction to point at
+        :type direction: float
+        :param canvas_name: "global" for now
+        :type canvas_name: str
+        :param x1_range: x1 range of objects that should be drawn
+        :type x1_range: tuple[float, float]
+        :param x2_range: x2 range of objects that should be drawn
+        :type x2_range: tuple[float, float]
+        :param color: color of object to be drawn
+        :type color: str, defaults to black
+        """
+        # if canvas_name == "local":
+        #     map_ = self.local_map
+        #     x1 = x1/SCREEN_SIZE["width"]*self.LOCAL_CANVAS_WIDTH
+        #     x2 = x2/SCREEN_SIZE["height"]*self.LOCAL_CANVAS_HEIGHT
+        # elif canvas_name == "global":
+        if canvas_name == "global":
+            x11 = player_position.x1
+            x12 = player_position.x2
+            x21 = player_position.x1 + self.RUNNING_DIRECTION_LENGTH*math.cos(direction)
+            x22 = player_position.x2 + self.RUNNING_DIRECTION_LENGTH*math.sin(direction)
+            map_ = self.world_map
+            x1, y1 = self.convert_world_coords_to_world_graph(x11, x12, x1_range, x2_range)
+            x2, y2 = self.convert_world_coords_to_world_graph(x21, x22, x1_range, x2_range)
+        else:
+            raise ValueError("Wrong usage!")
+        map_.create_line(x1, y1, x2, y2, fill=color)
 
     def draw_std(self, x1 : float, x2 : float, std : tuple[float, float], canvas_name : str, 
                  x1_range : tuple[float, float], x2_range : tuple[float, float]):
