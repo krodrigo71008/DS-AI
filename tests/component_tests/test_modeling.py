@@ -403,8 +403,8 @@ def try_out_warp_perspective(image_path: str):
     modeling = Modeling()
     world = modeling.world_model
     image = Image.open(image_path).resize((512, 512))
-    res = world.warp_image_to_ground(np.asarray(image), 135, CAMERA_PITCH, CAMERA_DISTANCE, FOV)[0]
-    Image.fromarray(res).save("warped_test.jpg")
+    res, x_range, y_range = world.warp_image_to_ground(np.asarray(image), 135, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+    Image.fromarray(np.transpose(res, (1, 0, 2))).save("warped_test.jpg")
     return res
 
 def try_out_process_segmentation_image(segmentation_array: np.ndarray):

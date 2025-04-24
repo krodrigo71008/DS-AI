@@ -41,9 +41,9 @@ def image_to_local_position(image_position : Point2d,
     temp2 = distance*sin_pitch + follow_height
     temp3 = follow_height*f*cos_pitch
     temp4 = cos_pitch*v+f*sin_pitch
-    world_x = (cos_heading*temp*v - sin_heading*temp2*u - 
+    world_x = (-sin_heading*temp2*u + cos_heading*temp*v - 
                 temp3*cos_heading)/temp4
-    world_z = (sin_heading*temp*v + cos_heading*temp2*u - 
+    world_z = (cos_heading*temp2*u + sin_heading*temp*v - 
                 temp3*sin_heading)/temp4
     # in our world model, we'll use (x,z) as the two coordinates
     return Point2d(world_x, world_z)

@@ -10,6 +10,7 @@ from perception.SegmentationModel import SegmentationModel
 from decisionMaking.DecisionMaking import DecisionMaking
 from control.Control import Control
 from utility.Clock import ClockMock
+from utility.Visualizer import Visualizer
 
 
 if __name__ == "__main__":
@@ -48,13 +49,15 @@ if __name__ == "__main__":
 
     diff_averages = []
 
-    aux = []
-    aux_image = None
-    for i in range(len(vision_timestamps)):
-        img = np.load(f"{folder_name}/vision_{i+1}.npy")
-        if aux_image is not None:
-            aux.append(np.average(cv2.absdiff(img, aux_image)))
-        aux_image = img
+    vis_screen = Visualizer()
+
+    # aux = []
+    # aux_image = None
+    # for i in range(len(vision_timestamps)):
+    #     img = np.load(f"{folder_name}/vision_{i+1}.npy")
+    #     if aux_image is not None:
+    #         aux.append(np.average(cv2.absdiff(img, aux_image)))
+    #     aux_image = img
 
 
     while True:
@@ -69,10 +72,11 @@ if __name__ == "__main__":
         if not received_new_vision_image: # this mimics how modeling.handle_detected_objects_queue is structured
             detected_objects = modeling.latest_detected_objects
             modeling.received_yolo_info = False
+            vis_screen.redraw_detected_objects()
         else:
             while vision_timestamps[vision_index] <= vision_timestamp:
                 vision_screenshot = np.load(f"{folder_name}/vision_{vision_index}.npy")
-                cv2.imwrite(f"{folder_name}/output/vision_{vision_index}.jpg", vision_screenshot)
+                # cv2.imwrite(f"{folder_name}/output/vision_{vision_index}.jpg", vision_screenshot)
                 detected_objects, classes, scores, boxes, diff = perception.perceive(vision_screenshot)
                 if diff is not None and modeling._record_image_diffs:
                     modeling.last_image_diffs.append(diff)
@@ -83,16 +87,19 @@ if __name__ == "__main__":
                 modeling.latest_detected_objects = detected_objects
             else:
                 modeling.received_yolo_info = False
+            vis_screen.update_yolo_image(vision_screenshot)
+            vis_screen.draw_detected_objects(classes, scores, boxes)
 
         seg_timestamp = modeling_received_info_list[modeling_time_index][1]
         received_new_segmentation_image = seg_timestamp != -1
         if not received_new_segmentation_image: # this mimics how modeling.handle_segmentation_queue is structured
             segmentation_results = modeling.latest_segmentation_info
             modeling.received_segmentation_info = False
+            vis_screen.redraw_segmentation_results()
         else:
             seg_index = np.nonzero(seg_timestamps == seg_timestamp)[0][0]
             seg_screenshot = np.load(f"{folder_name}/segmentation_{seg_index+1}.npy")
-            cv2.imwrite(f"{folder_name}/output/segmentation_{seg_index}.jpg", vision_screenshot)
+            # cv2.imwrite(f"{folder_name}/output/segmentation_{seg_index}.jpg", vision_screenshot)
             segmentation_results = seg_model.perceive(seg_screenshot)
             modeling.latest_segmentation_timestamp = seg_timestamp
             if modeling.do_image_processing:
@@ -100,10 +107,24 @@ if __name__ == "__main__":
                 modeling.latest_segmentation_info = segmentation_results
             else:
                 modeling.received_segmentation_info = False
+            vis_screen.update_segmentation_image(seg_screenshot)
+            vis_screen.draw_segmentation_results(segmentation_results)
         
         modeling.update_model_using_info(detected_objects, segmentation_results)
         decision_making.decide(modeling)
         control.control(decision_making, modeling)
+
+        if received_new_segmentation_image:
+            vis_screen.draw_world_model_image(modeling.world_model.latest_debug_image)
+        else:
+            vis_screen.redraw_world_model_image()
+
+        vis_screen.update_world_model(modeling)
+        vis_screen.draw_time(modeling.clock.time())
+        if received_new_vision_image or received_new_segmentation_image:
+            vis_screen.export_results(f"{folder_name}/output/{modeling.clock.current_time_index - 2}.jpg")
+        else:
+            vis_screen.reset()
 
         
     print("Done")

@@ -177,31 +177,33 @@ class WorldModel:
         :type distance: float
         :param fov: camera FOV
         :type fov: float
-        :return: warped image, x range and y range relative to the player
+        :return: warped image, x1 range and x2 range relative to the player
         :rtype: tuple[np.ndarray, tuple[float, float], tuple[float, float]]
         """
         # f = H / (2*tan(AFOV/2)), f focal distance, H height, AFOV angular FOV
         f = SCREEN_SIZE["height"]/(2*math.tan(fov/180*math.pi/2))
-        cx = SCREEN_SIZE["width"]/2
-        cy = SCREEN_SIZE["height"]/2
+        c_u = SCREEN_SIZE["width"]/2
+        c_v = SCREEN_SIZE["height"]/2
         heading = heading*math.pi/180
         pitch = pitch*math.pi/180
         matrix = np.array([
-            [(-f*math.cos(heading)-cx*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
-             (f*math.sin(heading)-cx*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"], 
-             (cx*distance+cx*FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[0]/SCREEN_SIZE["width"]],
+            [(-math.sin(heading)*(-distance*math.sin(pitch)-FOLLOW_HEIGHT)), 
+             (math.cos(heading)*(-distance-FOLLOW_HEIGHT*math.sin(pitch))), 
+             (math.sin(heading)*(-distance*math.sin(pitch)-FOLLOW_HEIGHT)*c_u-math.cos(heading)*(-distance-FOLLOW_HEIGHT*math.sin(pitch))*c_v
+              +math.cos(pitch)*math.cos(heading)*f*FOLLOW_HEIGHT)],
 
-            [(f*math.sin(pitch)*math.sin(heading)-cy*math.cos(pitch)*math.sin(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
-             (f*math.sin(pitch)*math.cos(heading)-cy*math.cos(pitch)*math.cos(heading))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"],
-             (f*FOLLOW_HEIGHT*math.cos(pitch)+cy*distance+cy*FOLLOW_HEIGHT*math.sin(pitch))*SEGMENTATION_INPUT_SIZE[1]/SCREEN_SIZE["height"]],
+            [(math.cos(heading)*(-distance*math.sin(pitch)-FOLLOW_HEIGHT)), 
+             (math.sin(heading)*(-distance-FOLLOW_HEIGHT*math.sin(pitch))), 
+             (-math.cos(heading)*(-distance*math.sin(pitch)-FOLLOW_HEIGHT)*c_u-math.sin(heading)*(-distance-FOLLOW_HEIGHT*math.sin(pitch))*c_v
+              +math.cos(pitch)*math.sin(heading)*f*FOLLOW_HEIGHT)],
 
-            [-math.cos(pitch)*math.sin(heading),
-             -math.cos(pitch)*math.cos(heading),
-             distance+FOLLOW_HEIGHT*math.sin(pitch)],
+            [0,
+             -math.cos(pitch),
+             math.cos(pitch)*c_v-f*math.sin(pitch)],
         ])
-        matrix = np.linalg.inv(matrix)
-        # matrix[0, :] = matrix[0, :]*(SEGMENTATION_INPUT_SIZE[0]/52.731)
-        # matrix[1, :] = matrix[1, :]*(SEGMENTATION_INPUT_SIZE[1]/52.731)
+        # adjusting matrix to account for input with the correct size instead of the 1920x1080 previously assumed
+        matrix[:, 0] = matrix[:, 0] * SCREEN_SIZE["width"]/SEGMENTATION_INPUT_SIZE[0]
+        matrix[:, 1] = matrix[:, 1] * SCREEN_SIZE["height"]/SEGMENTATION_INPUT_SIZE[1]
         # 4 image corners
         c1 = np.array([[0, 0, 1]]).T
         c2 = np.array([[SEGMENTATION_INPUT_SIZE[0], 0, 1]]).T
@@ -212,24 +214,41 @@ class WorldModel:
         r2 = np.matmul(matrix, c2)
         r3 = np.matmul(matrix, c3)
         r4 = np.matmul(matrix, c4)
+        # print((r1[0, 0]/r1[2, 0], r1[1, 0]/r1[2, 0]), (r2[0, 0]/r2[2, 0], r2[1, 0]/r2[2, 0]), (r3[0, 0]/r3[2, 0], r3[1, 0]/r3[2, 0]), (r4[0, 0]/r4[2, 0], r4[1, 0]/r4[2, 0]))
+
         # finding x and y range
-        x_min = min(r1[0]/r1[2], r2[0]/r2[2], r3[0]/r3[2], r4[0]/r4[2])
-        y_min = min(r1[1]/r1[2], r2[1]/r2[2], r3[1]/r3[2], r4[1]/r4[2])
-        x_max = max(r1[0]/r1[2], r2[0]/r2[2], r3[0]/r3[2], r4[0]/r4[2])
-        y_max = max(r1[1]/r1[2], r2[1]/r2[2], r3[1]/r3[2], r4[1]/r4[2])
+        x1_min = min(r1[0]/r1[2], r2[0]/r2[2], r3[0]/r3[2], r4[0]/r4[2])
+        x2_min = min(r1[1]/r1[2], r2[1]/r2[2], r3[1]/r3[2], r4[1]/r4[2])
+        x1_max = max(r1[0]/r1[2], r2[0]/r2[2], r3[0]/r3[2], r4[0]/r4[2])
+        x2_max = max(r1[1]/r1[2], r2[1]/r2[2], r3[1]/r3[2], r4[1]/r4[2])
         # this rescales the output because world coordinates would be like 50, but we need it to be like 500
-        matrix[0, :] = matrix[0, :]*(SEGMENTATION_INPUT_SIZE[0]/(x_max - x_min))
-        matrix[1, :] = matrix[1, :]*(SEGMENTATION_INPUT_SIZE[1]/(y_max - y_min))
+        matrix[0, :] = matrix[0, :]*(SEGMENTATION_INPUT_SIZE[0]/(x1_max - x1_min))
+        matrix[1, :] = matrix[1, :]*(SEGMENTATION_INPUT_SIZE[1]/(x2_max - x2_min))
+        
+        # converted corners
+        # r1 = np.matmul(matrix, c1)
+        # r2 = np.matmul(matrix, c2)
+        # r3 = np.matmul(matrix, c3)
+        # r4 = np.matmul(matrix, c4)
+        # print((r1[0, 0]/r1[2, 0], r1[1, 0]/r1[2, 0]), (r2[0, 0]/r2[2, 0], r2[1, 0]/r2[2, 0]), (r3[0, 0]/r3[2, 0], r3[1, 0]/r3[2, 0]), (r4[0, 0]/r4[2, 0], r4[1, 0]/r4[2, 0]))
+
         # translating output to be on positive x and y
         transl_mat = np.eye(3)
-        transl_mat[0, 2] = -x_min*(SEGMENTATION_INPUT_SIZE[0]/(x_max - x_min))
-        transl_mat[1, 2] = -y_min*(SEGMENTATION_INPUT_SIZE[1]/(y_max - y_min))
+        transl_mat[0, 2] = -x1_min*(SEGMENTATION_INPUT_SIZE[0]/(x1_max - x1_min))
+        transl_mat[1, 2] = -x2_min*(SEGMENTATION_INPUT_SIZE[1]/(x2_max - x2_min))
         matrix = np.matmul(transl_mat, matrix)
         
+        # converted corners
+        # r1 = np.matmul(matrix, c1)
+        # r2 = np.matmul(matrix, c2)
+        # r3 = np.matmul(matrix, c3)
+        # r4 = np.matmul(matrix, c4)
+        # print((r1[0, 0]/r1[2, 0], r1[1, 0]/r1[2, 0]), (r2[0, 0]/r2[2, 0], r2[1, 0]/r2[2, 0]), (r3[0, 0]/r3[2, 0], r3[1, 0]/r3[2, 0]), (r4[0, 0]/r4[2, 0], r4[1, 0]/r4[2, 0]))
+
         image = image.astype('uint8')
         res = cv2.warpPerspective(image, matrix, (SEGMENTATION_INPUT_SIZE[0], SEGMENTATION_INPUT_SIZE[1]), flags=cv2.INTER_NEAREST)
 
-        return res, (x_min[0], x_max[0]), (y_min[0], y_max[0])
+        return res, (x1_min[0], x1_max[0]), (x2_min[0], x2_max[0])
 
     def process_segmentation_image(self, image: np.ndarray, past_player_position : Point2d) -> Image.Image:
         """Updates tiles based on segmentation info
@@ -240,25 +259,27 @@ class WorldModel:
         :type past_player_position: Point2d
         """
         # in openCV, x is right and y is down, but for us x1 is down and x2 is right, so they are inverted
-        warped_image, x_range, y_range = self.warp_image_to_ground(image, self.heading, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
+        warped_image, x1_range, x2_range = self.warp_image_to_ground(image, self.heading, CAMERA_PITCH, CAMERA_DISTANCE, FOV)
         player_pos = past_player_position
-        x_min = x_range[0] + player_pos.x2
-        x_max = x_range[1] + player_pos.x2
-        y_min = y_range[0] + player_pos.x1
-        y_max = y_range[1] + player_pos.x1
+        x1_min = x1_range[0] + player_pos.x1
+        x1_max = x1_range[1] + player_pos.x1
+        x2_min = x2_range[0] + player_pos.x2
+        x2_max = x2_range[1] + player_pos.x2
+
+        print("seg", (player_pos.x1, player_pos.x2), x1_range, x2_range)
 
         x_lines = []
-        aux = (x_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE
-        left_corner_x = aux
-        while aux < x_max:
-            x_lines.append(int((aux - x_min)/(x_max - x_min)*SEGMENTATION_INPUT_SIZE[0]))
+        aux = (x2_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE
+        left_corner_x2 = aux
+        while aux < x2_max:
+            x_lines.append(int((aux - x2_min)/(x2_max - x2_min)*SEGMENTATION_INPUT_SIZE[0]))
             aux += TILE_SIZE
 
         y_lines = []
-        aux = (y_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE
-        left_corner_y = aux
-        while aux < y_max:
-            y_lines.append(int((aux - y_min)/(y_max - y_min)*SEGMENTATION_INPUT_SIZE[1]))
+        aux = (x1_min // TILE_SIZE) * TILE_SIZE + TILE_SIZE
+        left_corner_x1 = aux
+        while aux < x1_max:
+            y_lines.append(int((aux - x1_min)/(x1_max - x1_min)*SEGMENTATION_INPUT_SIZE[1]))
             aux += TILE_SIZE
 
         # how to do averages efficiently?
@@ -266,7 +287,7 @@ class WorldModel:
         # conv_kernel = torch.Tensor(np.ones((kernel_size, kernel_size))/kernel_size/kernel_size)
         # res_tensor = torch.Tensor(warped_image[x_lines[0]:x_lines[-1], y_lines[0]:y_lines[-1], :]).unsqueeze(0).permute(0, 3, 1, 2)
         
-        self.tile_manager.add_detections(x_lines, y_lines, warped_image, (int(left_corner_y // TILE_SIZE), int(left_corner_x // TILE_SIZE)))
+        self.tile_manager.add_detections(x_lines, y_lines, warped_image, (int(left_corner_x1 // TILE_SIZE), int(left_corner_x2 // TILE_SIZE)))
         # check if enough tiles were detected to consider the chunk explored
         chunk_index = self.point_to_chunk_index(past_player_position)
         tile1 = (chunk_index[0]*(CHUNK_SIZE//TILE_SIZE), chunk_index[1]*(CHUNK_SIZE//TILE_SIZE))
